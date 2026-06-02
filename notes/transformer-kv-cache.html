@@ -1,0 +1,1882 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>我把 Transformer 扒了个底朝天</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet">
+  <style>
+    /* ════════════════════════════════════════════
+       Claude 设计风格 — 暖奶油画布 + 珊瑚强调
+       ════════════════════════════════════════════ */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'DM Sans', -apple-system, 'PingFang SC', sans-serif;
+      background: #faf9f5;
+      color: #3d3d3a;
+      min-height: 100vh;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    body::after {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: #cc785c;
+      z-index: 999;
+    }
+
+    /* ═══ 色彩变量：Q紫 / K蓝 / V橙 / Score灰 / 输出绿 ═══ */
+    :root {
+      --q: #a78bfa;
+      --k: #38bdf8;
+      --v: #ff8a3d;
+      --green: #059669;
+      --amber: #d97706;
+      --blue: #2563eb;
+      --red: #c64545;
+    }
+
+    /* ═══ 顶栏：返回按钮 + 标签 ═══ */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(250, 249, 245, 0.92);
+      -webkit-backdrop-filter: saturate(140%) blur(12px);
+      backdrop-filter: saturate(140%) blur(12px);
+      border-bottom: 1px solid #e6dfd8;
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .topbar a.back {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      text-decoration: none;
+      color: #6c6a64;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 5px 10px;
+      border-radius: 6px;
+    }
+
+    .topbar a.back:hover {
+      color: #141413;
+      background: #efe9de;
+    }
+
+    .topbar .sep {
+      width: 1px;
+      height: 14px;
+      background: #e6dfd8;
+    }
+
+    .topbar .tag {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #cc785c;
+    }
+
+    /* ═══ 主标题区：Cormorant Garamond 衬线体 ═══ */
+    .hero {
+      position: relative;
+      z-index: 1;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 56px 32px 24px;
+      text-align: center;
+    }
+
+    .hero h1 {
+      font-family: 'Cormorant Garamond', Garamond, serif;
+      font-size: 36px;
+      font-weight: 700;
+      letter-spacing: -.8px;
+      line-height: 1.15;
+      color: #141413;
+      margin-bottom: 16px;
+    }
+
+    .hero .sub {
+      font-size: 15px;
+      color: #8e8b82;
+      line-height: 1.55;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .hero .sub strong {
+      color: #cc785c;
+      font-weight: 600;
+    }
+
+    .hero .rule {
+      width: 40px;
+      height: 2px;
+      background: #cc785c;
+      margin: 22px auto 0;
+      border-radius: 1px;
+    }
+
+    /* ═══ Tab 导航：粘性定位，胶囊按钮，→ 箭头递进 ═══ */
+    .tabs-wrap {
+      position: sticky;
+      top: 41px;
+      z-index: 99;
+      background: rgba(250, 249, 245, 0.92);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid #ebe6df;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 12px 24px;
+      display: flex;
+      gap: 0;
+      overflow-x: auto;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .tabs-wrap::-webkit-scrollbar {
+      display: none;
+    }
+
+    .tab-btn {
+      flex-shrink: 0;
+      padding: 7px 14px;
+      border: 1px solid #e6dfd8;
+      border-radius: 999px;
+      background: transparent;
+      color: #6c6a64;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all .2s;
+      white-space: nowrap;
+    }
+
+    .tab-btn:hover {
+      border-color: #cc785c;
+      color: #141413;
+    }
+
+    .tab-btn.active {
+      background: #cc785c;
+      color: #fff;
+      border-color: #cc785c;
+    }
+
+    .tab-arrow {
+      flex-shrink: 0;
+      font-size: 14px;
+      color: #c4c0b8;
+      font-weight: 600;
+      padding: 0 4px;
+      user-select: none;
+    }
+
+    .content {
+      position: relative;
+      z-index: 1;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 28px 32px 80px;
+    }
+
+    .tab-panel {
+      display: none;
+    }
+
+    .tab-panel.active {
+      display: block;
+      animation: fadeIn .35s ease;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* ═══ 卡片容器：白色圆角，左侧珊瑚条标题 ═══ */
+    /* ── Card ── */
+    .card {
+      background: #fff;
+      border: 1px solid #e6dfd8;
+      border-radius: 16px;
+      padding: 32px 28px;
+      margin-bottom: 18px;
+      box-shadow: 0 2px 8px rgba(20, 20, 19, .03);
+    }
+
+    .sec-name {
+      font-family: 'Cormorant Garamond', Garamond, serif;
+      font-size: 22px;
+      font-weight: 500;
+      letter-spacing: -.2px;
+      color: #141413;
+      margin-bottom: 18px;
+      padding-left: 14px;
+      border-left: 3px solid #cc785c;
+    }
+
+    /* ═══ 响应式两栏 / 三栏布局 ═══ */
+    /* ── Layout ── */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .three-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+    }
+
+    .col {
+      padding: 18px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+    }
+
+    .col.warm {
+      background: #fff4e8;
+      border-color: #ffd9b3;
+    }
+
+    .col.cool {
+      background: #f1f6fb;
+      border-color: #cfe0f0;
+    }
+
+    .col.grn {
+      background: #f0fdf4;
+      border-color: #bbf7d0;
+    }
+
+    .col.soft {
+      background: #f5f0e8;
+      border-color: #e6dfd8;
+    }
+
+    .col h3 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 19px;
+      font-weight: 500;
+      color: #141413;
+      margin-bottom: 8px;
+    }
+
+    .col .t {
+      font-size: 13px;
+      line-height: 1.55;
+      color: #6c6a64;
+    }
+
+    .col .t strong {
+      color: #141413;
+    }
+
+    /* ═══ 词块：展示注意力关联关系的 token 标签 ═══ */
+    /* ── Word chips ── */
+    .word-row {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .wc {
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #141413;
+      background: #f5f0e8;
+      border: 1px solid #e6dfd8;
+    }
+
+    .wc.hl {
+      background: #cc785c;
+      color: #fff;
+      border-color: #cc785c;
+      box-shadow: 0 0 0 3px rgba(204, 120, 92, .15);
+    }
+
+    .wc.linked {
+      background: #d1fae5;
+      color: #065f46;
+      border-color: #6ee7b7;
+    }
+
+    /* ═══ 矩阵网格：CSS Grid 小方块展示矩阵运算 ═══ */
+    /* ── Matrix ── */
+    .mtx {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .mtx .lbl {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .mtx .lbl.q {
+      color: var(--q);
+    }
+
+    .mtx .lbl.k {
+      color: var(--k);
+    }
+
+    .mtx .lbl.v {
+      color: var(--v);
+    }
+
+    .mtx .lbl.s {
+      color: #8e8b82;
+    }
+
+    .mtx .lbl.o {
+      color: var(--green);
+    }
+
+    .mtx .dim {
+      font-size: 11px;
+      color: #8e8b82;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .g {
+      display: grid;
+      gap: 2px;
+    }
+
+    .c {
+      width: 14px;
+      height: 14px;
+      border-radius: 2px;
+    }
+
+    .c.q {
+      background: var(--q);
+    }
+
+    .c.k {
+      background: var(--k);
+    }
+
+    .c.v {
+      background: var(--v);
+    }
+
+    .c.s {
+      background: #5b6472;
+    }
+
+    .c.o {
+      background: var(--green);
+    }
+
+    .c.e {
+      background: #e6dfd8;
+    }
+
+    .c.new {
+      background: #ffe066;
+      box-shadow: 0 0 0 2px var(--v), 0 0 6px rgba(255, 224, 102, .6);
+      position: relative;
+      z-index: 2;
+    }
+
+    .c.newk {
+      background: #bdebff;
+      box-shadow: 0 0 0 2px var(--k), 0 0 6px rgba(189, 235, 255, .6);
+      position: relative;
+      z-index: 2;
+    }
+
+    .op {
+      font-size: 20px;
+      color: #8e8b82;
+      font-weight: 600;
+    }
+
+    .mtx-flow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    /* ── Ins ── */
+    .ins {
+      background: #efe9de;
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #6c6a64;
+      text-align: center;
+    }
+
+    .ins strong {
+      color: #141413;
+    }
+
+    /* ── Role cards ── */
+    /* ═══ 角色卡片：Q紫 / K蓝 / V橙 三色标识 ═══ */
+    .role-card {
+      border-radius: 14px;
+      padding: 24px 16px 18px;
+      text-align: center;
+      border: 2px solid;
+    }
+
+    .role-card.q {
+      background: rgba(167, 139, 250, .06);
+      border-color: var(--q);
+    }
+
+    .role-card.k {
+      background: rgba(56, 189, 248, .06);
+      border-color: var(--k);
+    }
+
+    .role-card.v {
+      background: rgba(255, 138, 61, .06);
+      border-color: var(--v);
+    }
+
+    .role-card .rl {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .role-card.q .rl {
+      color: var(--q);
+    }
+
+    .role-card.k .rl {
+      color: var(--k);
+    }
+
+    .role-card.v .rl {
+      color: var(--v);
+    }
+
+    .role-card .rd {
+      font-size: 13px;
+      color: #6c6a64;
+      line-height: 1.45;
+    }
+
+    .role-card .rd strong {
+      color: #141413;
+    }
+
+    /* ── Dark box ── */
+    /* ═══ 深色代码块：黑底珊瑚标签 + JetBrains Mono ═══ */
+    .dark-box {
+      background: #181715;
+      border-radius: 12px;
+      padding: 18px 22px;
+      color: #faf9f5;
+    }
+
+    .dark-box .dt {
+      font-size: 12px;
+      color: #cc785c;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+
+    .dark-box .dr {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      line-height: 1.7;
+      color: #a09d96;
+    }
+
+    .dark-box .dr .tk {
+      color: #4ade80;
+      font-weight: 600;
+    }
+
+    .dark-box .dr .dd {
+      color: #8e8b82;
+    }
+
+    /* ── Layers ── */
+    .lblk {
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .lblk .ln {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      opacity: .5;
+      min-width: 44px;
+    }
+
+    .lblk.syn {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .lblk.sem {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .lblk.log {
+      background: #fce7f3;
+      color: #9d174d;
+    }
+
+    /* ═══ 模型对比表 ═══ */
+    /* ── Model table ── */
+    .mtbl {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      border: 1px solid #e6dfd8;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .mtbl th {
+      background: #f5f0e8;
+      color: #6c6a64;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid #e6dfd8;
+    }
+
+    .mtbl td {
+      padding: 9px 12px;
+      font-size: 13px;
+      color: #3d3d3a;
+      border-bottom: 1px solid #ebe6df;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .mtbl tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .mtbl td strong {
+      color: #141413;
+    }
+
+    /* ═══ 因果掩码下三角矩阵 ═══ */
+    /* ── Mask ── */
+    .mask-g {
+      display: inline-grid;
+      grid-template-columns: repeat(5, 40px);
+      gap: 2px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+    }
+
+    .m {
+      width: 40px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+
+    .m.hd {
+      background: #efe9de;
+      color: #6c6a64;
+      font-weight: 600;
+    }
+
+    .m.ok {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .m.no {
+      background: #181715;
+      color: #c64545;
+    }
+
+    .m.fc {
+      background: #cc785c;
+      color: #fff;
+      font-weight: 700;
+      box-shadow: 0 0 0 2px #cc785c;
+    }
+
+    /* ═══ 对比栏：有缓存(绿) vs 无缓存(红) ═══ */
+    /* ── Compare ── */
+    .cmp {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .cmp-s {
+      border-radius: 14px;
+      padding: 22px 18px;
+    }
+
+    .cmp-s.bad {
+      background: #fef2f2;
+      border: 2px solid #fecaca;
+    }
+
+    .cmp-s.good {
+      background: #f0fdf4;
+      border: 2px solid #bbf7d0;
+    }
+
+    .cmp-s .st {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .cmp-s.bad .st {
+      color: #c14d3a;
+    }
+
+    .cmp-s.good .st {
+      color: #059669;
+    }
+
+    .cmp-r {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      padding: 3px 0;
+      color: #6c6a64;
+    }
+
+    .cmp-r .lt {
+      background: #181715;
+      color: #faf9f5;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 500;
+      min-width: 48px;
+      text-align: center;
+    }
+
+    .cmp-t {
+      margin-left: auto;
+      font-weight: 600;
+    }
+
+    .cmp-s.bad .cmp-t {
+      color: #c14d3a;
+    }
+
+    .cmp-s.good .cmp-t {
+      color: #059669;
+    }
+
+    .cmp-tot {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dashed #e6dfd8;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .cmp-s.bad .cmp-tot {
+      color: #c14d3a;
+    }
+
+    .cmp-s.good .cmp-tot {
+      color: #059669;
+    }
+
+    /* ── Badges ── */
+    .badge {
+      display: inline-block;
+      background: #cc785c;
+      color: #fff;
+      border-radius: 999px;
+      padding: 6px 16px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .badge.g {
+      background: var(--green);
+    }
+
+    /* ── Temp ── */
+    .temp-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .temp-item {
+      flex: 1;
+      border-radius: 10px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .temp-item.lo {
+      background: #fef2f2;
+    }
+
+    .temp-item.mid {
+      background: #f5f0e8;
+    }
+
+    .temp-item.hi {
+      background: #fef3c7;
+    }
+
+    .temp-item .tl {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .5px;
+      margin-bottom: 4px;
+    }
+
+    .temp-item.lo .tl {
+      color: #c14d3a;
+    }
+
+    .temp-item.hi .tl {
+      color: #92400e;
+    }
+
+    .temp-item.mid .tl {
+      color: #6c6a64;
+    }
+
+    /* ── Formula ── */
+    .fm {
+      text-align: center;
+      padding: 12px 18px;
+      background: #faf9f5;
+      border-radius: 10px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      color: #3d3d3a;
+    }
+
+    .fm .fq {
+      color: var(--q);
+      font-weight: 700;
+    }
+
+    .fm .fk {
+      color: var(--k);
+      font-weight: 700;
+    }
+
+    .fm .fv {
+      color: var(--v);
+      font-weight: 700;
+    }
+
+    /* ── Path (T11) ── */
+    .path {
+      position: relative;
+      max-width: 880px;
+      margin: 0 auto;
+    }
+
+    .path-start {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 4px;
+    }
+
+    .path-dot.start {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #faf9f5;
+      border: 3px solid #cc785c;
+      box-shadow: 0 0 0 4px rgba(204, 120, 92, .12);
+    }
+
+    .path-label.start {
+      font-size: 14px;
+      font-weight: 600;
+      color: #cc785c;
+      line-height: 1.4;
+    }
+
+    .path-leg {
+      display: flex;
+      align-items: center;
+      padding: 2px 0;
+    }
+
+    .path-leg.right {
+      margin-left: 32px;
+    }
+
+    .path-leg.down {
+      margin-left: 32px;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+    }
+
+    .path-leg.left {
+      margin-left: 32px;
+      flex-direction: row-reverse;
+      justify-content: flex-end;
+    }
+
+    .path-arrow {
+      width: 56px;
+      height: 36px;
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .path-arrow.r {
+      width: 56px;
+    }
+
+    .path-arrow.d {
+      width: 70px;
+      height: 32px;
+    }
+
+    .path-arrow.l {
+      width: 56px;
+    }
+
+    .path-arrow::before {
+      content: '';
+      position: absolute;
+      background: #e6dfd8;
+      border-radius: 2px;
+    }
+
+    .path-arrow.r::before {
+      top: 50%;
+      left: 0;
+      right: 7px;
+      height: 2px;
+    }
+
+    .path-arrow.r::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      right: 0;
+      width: 0;
+      height: 0;
+      border-left: 7px solid #cc785c;
+      border-top: 5px solid transparent;
+      border-bottom: 5px solid transparent;
+      transform: translateY(-50%);
+    }
+
+    .path-arrow.l::before {
+      top: 50%;
+      left: 7px;
+      right: 0;
+      height: 2px;
+    }
+
+    .path-arrow.l::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 0;
+      width: 0;
+      height: 0;
+      border-right: 7px solid #cc785c;
+      border-top: 5px solid transparent;
+      border-bottom: 5px solid transparent;
+      transform: translateY(-50%);
+    }
+
+    .path-arrow.d::before {
+      left: 50%;
+      top: 0;
+      bottom: 7px;
+      width: 2px;
+    }
+
+    .path-arrow.d::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      width: 0;
+      height: 0;
+      border-top: 7px solid #cc785c;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      transform: translateX(-50%);
+    }
+
+    .path-node {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: #fff;
+      border: 1px solid #e6dfd8;
+      border-radius: 12px;
+      padding: 12px 16px;
+      transition: border-color .2s, box-shadow .2s;
+      box-shadow: 0 1px 3px rgba(20, 20, 19, .03);
+    }
+
+    .path-node:hover {
+      border-color: #cc785c;
+      box-shadow: 0 4px 14px rgba(204, 120, 92, .1);
+    }
+
+    .path-node.keynote {
+      border-color: #cc785c;
+      background: #fffbf7;
+      box-shadow: 0 4px 16px rgba(204, 120, 92, .1);
+    }
+
+    .path-node.final {
+      border-color: #059669;
+      background: #f0fdf4;
+      box-shadow: 0 4px 16px rgba(5, 150, 105, .08);
+    }
+
+    .path-node .pn {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 700;
+      color: #cc785c;
+      min-width: 22px;
+    }
+
+    .path-node.final .pn {
+      color: #059669;
+    }
+
+    .path-node .pname {
+      font-size: 14px;
+      font-weight: 700;
+      color: #141413;
+      min-width: 100px;
+      white-space: nowrap;
+    }
+
+    .path-node .pinsight {
+      font-size: 12px;
+      color: #6c6a64;
+      max-width: 240px;
+      line-height: 1.35;
+    }
+
+    .path-node .pmath {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 500;
+      color: #8e8b82;
+      white-space: nowrap;
+      background: #faf9f5;
+      padding: 2px 7px;
+      border-radius: 4px;
+    }
+
+    .path-node.keynote .pmath {
+      color: #059669;
+      background: #f0fdf4;
+    }
+
+    .path-node.final .pmath {
+      color: #059669;
+      background: #d1fae5;
+    }
+
+    /* ── Embedding flow ── */
+    .emb-flow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .emb-token {
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      background: #f5f0e8;
+      border: 1px solid #e6dfd8;
+      color: #141413;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .emb-arrow {
+      font-size: 18px;
+      color: #cc785c;
+      font-weight: 700;
+    }
+
+    .emb-out {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 10px 16px;
+      background: #181715;
+      border-radius: 10px;
+    }
+
+    .emb-out .lbl {
+      font-size: 10px;
+      color: #cc785c;
+      font-weight: 600;
+    }
+
+    .emb-out .vec {
+      display: flex;
+      gap: 2px;
+    }
+
+    .emb-out .vec span {
+      width: 10px;
+      height: 10px;
+      border-radius: 1px;
+      background: #e6dfd8;
+    }
+
+    @media (max-width: 760px) {
+
+      .two-col,
+      .three-col,
+      .cmp {
+        grid-template-columns: 1fr;
+      }
+
+      .hero h1 {
+        font-size: 26px;
+      }
+
+      .hero {
+        padding: 36px 16px 20px;
+      }
+
+      .content {
+        padding: 16px 16px 60px;
+      }
+
+      .card {
+        padding: 20px 14px;
+      }
+
+      .tabs-wrap {
+        padding: 10px 16px;
+      }
+
+      .mtx-flow {
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .path-leg {
+        margin-left: 16px !important;
+      }
+
+      .path-node {
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 10px 12px;
+      }
+
+      .path-node .pname {
+        min-width: auto;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ═══ 顶栏：返回首页 + 标签 ═══ -->
+  <div class="topbar">
+    <a class="back" href="../index.html">&#8592; 首页</a>
+    <div class="sep"></div>
+    <span class="tag">Transformer</span>
+  </div>
+
+  <div class="hero">
+    <h1>从一次账单疑惑，我把 Transformer 扒了个底朝天</h1>
+    <div class="sub">从计费里的 <strong>"输入 token（命中缓存）"</strong> 一路追问到注意力、Q/K/V、因果掩码，最后绕回来看缓存很朴素</div>
+    <div class="rule"></div>
+  </div>
+
+  <div class="tabs-wrap">
+    <button class="tab-btn active" data-t="t1">注意力机制</button>
+    <span class="tab-arrow">&rarr;</span>
+    <button class="tab-btn" data-t="t2">Embedding</button>
+    <span class="tab-arrow">&rarr;</span>
+    <button class="tab-btn" data-t="t3">Q / K / V</button>
+    <span class="tab-arrow">&rarr;</span>
+    <button class="tab-btn" data-t="t4">推理两段</button>
+    <span class="tab-arrow">&rarr;</span>
+    <button class="tab-btn" data-t="t5">输出</button>
+    <span class="tab-arrow">&rarr;</span>
+    <button class="tab-btn" data-t="t6">总结</button>
+  </div>
+
+  <div class="content">
+
+    <!-- ═══════ Tab 1: 注意力机制 — 词间关联分数 + O(n²) 动机 ═══════ -->
+    <!-- ═══════ T1: 注意力机制 ═══════ -->
+    <div class="tab-panel active" id="t1">
+      <div class="card">
+        <div class="sec-name">注意力机制：每个词都跟所有其他词计算关联分数</div>
+        <div class="word-row" style="margin-bottom:14px">
+          <span class="wc">小明</span><span class="wc">因为</span><span class="wc">昨天</span><span class="wc">熬夜</span><span
+            class="wc">打游戏</span><span class="wc">所以</span><span class="wc">今天</span><span class="wc">上课</span><span
+            class="wc hl">他</span><span class="wc">睡着了</span>
+        </div>
+        <div style="text-align:center;font-size:14px;color:#cc785c;margin-bottom:10px">注意力关联</div>
+        <div class="word-row" style="margin-bottom:16px">
+          <span class="wc linked">小明</span>
+          <span style="color:#6c6a64;font-size:12px;margin-left:6px;line-height:2.3">"他"关联到"小明"</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+          <div style="font-size:13px;color:#6c6a64;max-width:480px">
+            每个词配对全部词算 <strong style="color:#141413">关系分数</strong>，加权融合后每个词融入上下文信息
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div style="background:#fef3c7;border-radius:8px;padding:8px 12px;text-align:center"><span
+                style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#92400e">4K</span><br><span
+                style="font-size:9px;color:#8e8b82">1,600 万次</span></div>
+            <span style="color:#cc785c;font-weight:700">&rarr;</span>
+            <div style="background:#d1fae5;border-radius:8px;padding:8px 12px;text-align:center"><span
+                style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#065f46">128K</span><br><span
+                style="font-size:9px;color:#8e8b82">164 亿次</span></div>
+            <span style="color:#cc785c;font-weight:700">&rarr;</span>
+            <div style="background:#dbeafe;border-radius:8px;padding:8px 12px;text-align:center"><span
+                style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#1e40af">1M</span><br><span
+                style="font-size:9px;color:#8e8b82">1 万亿次</span></div>
+          </div>
+        </div>
+        <div class="ins" style="margin-top:14px"><strong>O(n&sup2;)</strong> &mdash; 上下文每翻一倍，计算量翻四倍。这就是缓存需求的最底层动机</div>
+      </div>
+    </div>
+
+    <!-- ═══════ Tab 2: Embedding — 词→向量查表 + W_Q/W_K/W_V 权重矩阵 ═══════ -->
+    <!-- ═══════ T2: Embedding ═══════ -->
+    <div class="tab-panel" id="t2">
+      <div class="card">
+        <div class="sec-name">从词到 Q/K/V：Embedding + 三个权重矩阵</div>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <!-- Step 1: Token → Embedding -->
+          <div class="two-col">
+            <div style="display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap">
+              <div class="emb-token">"我"</div>
+              <div class="emb-token">"爱"</div>
+              <div class="emb-token">"AI"</div>
+              <div class="emb-arrow">&rarr;</div>
+              <div class="emb-out">
+                <div class="lbl">Embedding 查表</div>
+                <div class="vec">
+                  <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+                </div>
+                <div class="vec">
+                  <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+                </div>
+                <div class="vec">
+                  <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+                </div>
+                <span style="font-size:9px;color:#8e8b82;font-family:'JetBrains Mono',monospace">X [3, d]</span>
+              </div>
+            </div>
+            <div class="col soft">
+              <h3>Embedding 层</h3>
+              <div class="t">一个巨大的<strong>查表映射</strong>，把词汇表里每个词映射到一个固定长度的数字向量（768 维 / 2048 维 / 7168
+                维等）。这个映射表也是<strong>训练出来的</strong>。</div>
+            </div>
+          </div>
+
+          <!-- Step 2: X x W = Q/K/V -->
+          <div class="two-col">
+            <div style="display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap">
+              <div class="emb-out" style="padding:8px 10px">
+                <span style="font-size:9px;color:#cc785c;font-family:'JetBrains Mono',monospace">X [n,d]</span>
+                <div class="vec"><span></span><span></span><span></span></div>
+                <div class="vec"><span></span><span></span><span></span></div>
+                <div class="vec"><span></span><span></span><span></span></div>
+              </div>
+              <span style="font-size:18px;margin:0 8px;color:#8e8b82">&times;</span>
+              <div style="display:flex;flex-direction:column;gap:6px;align-items:center">
+                <div
+                  style="background:rgba(167,139,250,.12);border:1px solid var(--q);border-radius:8px;padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--q)">
+                  W_Q</div>
+                <div
+                  style="background:rgba(56,189,248,.12);border:1px solid var(--k);border-radius:8px;padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--k)">
+                  W_K</div>
+                <div
+                  style="background:rgba(255,138,61,.12);border:1px solid var(--v);border-radius:8px;padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--v)">
+                  W_V</div>
+              </div>
+              <span style="font-size:18px;margin:0 8px;color:#8e8b82">=</span>
+              <div style="display:flex;flex-direction:column;gap:6px;align-items:center">
+                <div style="display:flex;gap:2px"><span
+                    style="width:8px;height:8px;border-radius:1px;background:var(--q)"></span><span
+                    style="width:8px;height:8px;border-radius:1px;background:var(--q)"></span><span
+                    style="width:8px;height:8px;border-radius:1px;background:var(--q)"></span></div>
+                <div style="display:flex;gap:2px"><span
+                    style="width:8px;height:8px;border-radius:1px;background:var(--k)"></span><span
+                    style="width:8px;height:8px;border-radius:1px;background:var(--k)"></span><span
+                    style="width:8px;height:8px;border-radius:1px;background:var(--k)"></span></div>
+                <div style="display:flex;gap:2px"><span
+                    style="width:8px;height:8px;border-radius:1px;background:var(--v)"></span><span
+                    style="width:8px;height:8px;border-radius:1px;background:var(--v)"></span><span
+                    style="width:8px;height:8px;border-radius:1px;background:var(--v)"></span></div>
+                <span style="font-size:9px;color:#8e8b82;font-family:'JetBrains Mono',monospace">Q, K, V [n,d_k]</span>
+              </div>
+            </div>
+            <div class="col warm">
+              <h3>W_Q, W_K, W_V</h3>
+              <div class="t"><strong>训练出来的权重矩阵</strong>，是模型的"知识"，固定不变。<br>X 是你每次输入的内容，动态生成。<br>Q/K/V 是 X &times; W
+                算出的<strong>中间结果</strong>。<br><br><span
+                  style="font-size:12px;color:#8e8b82">三个矩阵乘法<strong>同时进行</strong>，GPU 并行计算，互不依赖。</span></div>
+            </div>
+          </div>
+
+          <!-- Step 3: What's open-sourced -->
+          <div class="col cool">
+            <h3>开源模型开源的就是这些权重</h3>
+            <div class="t" style="font-family:'JetBrains Mono',monospace;font-size:12px">
+              Token Embedding 词汇表<br>
+              每层的 W_Q, W_K, W_V, W_O<br>
+              每层的 W_ffn1, W_ffn2<br>
+              LayerNorm gamma, beta<br>
+              Unembedding 权重 (W_vocab)
+            </div>
+            <div class="t" style="margin-top:6px">几个 GB 到几百 GB 的 .safetensors / .bin 文件</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ Tab 3: Q/K/V — 三角色投影 + 矩阵计算 + 层堆叠 ═══════ -->
+    <!-- ═══════ T3: Q / K / V ═══════ -->
+    <div class="tab-panel" id="t3">
+      <!-- Card A: 角色卡片 -->
+      <div class="card">
+        <div class="sec-name">每个词投影成三个角色：Query、Key、Value</div>
+        <div class="three-col" style="margin-bottom:14px">
+          <div class="role-card q">
+            <div class="rl">Query</div>
+            <div class="rd"><strong>查询</strong><br>此刻想找什么</div>
+          </div>
+          <div class="role-card k">
+            <div class="rl">Key</div>
+            <div class="rd"><strong>标签</strong><br>我能提供什么<br>供查询匹配</div>
+          </div>
+          <div class="role-card v">
+            <div class="rl">Value</div>
+            <div class="rd"><strong>内容</strong><br>被提取的真正信息</div>
+          </div>
+        </div>
+        <div class="fm">拿 <span class="fq">Q</span> 匹配所有 <span class="fk">K</span> &rarr; 找相关度最高的 &rarr; 提取对应的 <span
+            class="fv">V</span></div>
+        <div class="ins" style="margin-top:14px">
+          图书馆类比：<strong>Q</strong> = 查什么书；<strong>K</strong> = 书的标签；<strong>V</strong> = 书的正文。<br>
+          都由同一个输入 X 并行算出来（上一个 tab 介绍了从 Embedding 到 Q/K/V 的完整过程）
+        </div>
+      </div>
+
+      <!-- Card B: 矩阵计算 + 层堆叠 -->
+      <div class="two-col" style="margin-top:14px">
+        <!-- 矩阵计算 -->
+        <div class="card" style="margin-bottom:0">
+          <div class="sec-name">矩阵计算：Q&times;K<sup>T</sup> &rarr; Softmax &rarr; &times;V</div>
+          <div class="fm" style="margin-bottom:10px;font-size:12px">
+            Attention(<span class="fq">Q</span>, <span class="fk">K</span>, <span class="fv">V</span>) = softmax( <span
+              class="fq">Q</span> &times; <span class="fk">K</span><sup>T</sup> / &radic;d ) &times; <span
+              class="fv">V</span>
+          </div>
+          <div style="text-align:center;font-size:11px;color:#8e8b82;margin-bottom:6px">Prefill — 全量矩阵运算</div>
+          <div class="mtx-flow" style="margin-bottom:7px;gap:6px">
+            <div class="mtx">
+              <div class="lbl q" style="font-size:12px">Q</div>
+              <div class="g" id="g-q"></div>
+              <div class="dim">n&times;d</div>
+            </div>
+            <div class="op" style="font-size:16px">&times;</div>
+            <div class="mtx">
+              <div class="lbl k" style="font-size:12px">K<sup>T</sup></div>
+              <div class="g" id="g-kt"></div>
+              <div class="dim">d&times;n</div>
+            </div>
+            <div class="op" style="font-size:16px">=</div>
+            <div class="mtx">
+              <div class="lbl s" style="font-size:12px">Score</div>
+              <div class="g" id="g-score"></div>
+              <div class="dim">n&times;n</div>
+            </div>
+            <div class="op" style="font-size:16px">&times;</div>
+            <div class="mtx">
+              <div class="lbl v" style="font-size:12px">V</div>
+              <div class="g" id="g-v"></div>
+              <div class="dim">n&times;d</div>
+            </div>
+            <div class="op" style="font-size:16px">=</div>
+            <div class="mtx">
+              <div class="lbl o" style="font-size:12px">Out</div>
+              <div class="g" id="g-out"></div>
+              <div class="dim">n&times;d</div>
+            </div>
+          </div>
+          <div style="height:1px;background:#e6dfd8;margin: 10px 10px 3px"></div>
+          <div style="text-align:center;font-size:11px;color:#8e8b82;margin:8px 0 6px">Decode — 只算新增一行</div>
+          <div class="mtx-flow" style="gap:4px">
+            <div class="mtx">
+              <div class="lbl q" style="font-size:12px">q</div>
+              <div class="g" id="g-qd"></div>
+              <div class="dim">1&times;d</div>
+            </div>
+            <div class="op" style="font-size:16px">&times;</div>
+            <div class="mtx">
+              <div class="lbl k" style="font-size:12px">K<sup>T</sup></div>
+              <div class="g" id="g-kd"></div>
+              <div class="dim">d&times;(n+1)</div>
+            </div>
+            <div class="op" style="font-size:16px">=</div>
+            <div class="mtx">
+              <div class="lbl s" style="font-size:12px">Score</div>
+              <div class="g" id="g-scored"></div>
+              <div class="dim">1&times;(n+1)</div>
+            </div>
+            <div class="op" style="font-size:16px">&times;</div>
+            <div class="mtx">
+              <div class="lbl v" style="font-size:12px">V</div>
+              <div class="g" id="g-vd"></div>
+              <div class="dim">(n+1)&times;d</div>
+            </div>
+            <div class="op" style="font-size:16px">=</div>
+            <div class="mtx">
+              <div class="lbl o" style="font-size:12px">Out</div>
+              <div class="g" id="g-outd"></div>
+              <div class="dim">1&times;d</div>
+            </div>
+          </div>
+          <div style="font-size:11px;color:#6c6a64;text-align:center;margin-top:6px">新 K<strong
+              style="color:var(--k)">列</strong> + 新 V<strong style="color:var(--v)">行</strong> &rarr; 老 K/V 被反复查 =
+            <strong style="color:#141413">KV Cache 存在的理由</strong></div>
+        </div>
+
+        <!-- 层堆叠 -->
+        <div class="card" style="margin-bottom:0">
+          <div class="sec-name">层堆叠：浅层语法 &rarr; 深层逻辑</div>
+          <div style="display:flex;flex-direction:column;gap:3px;margin-bottom:14px">
+            <div class="lblk syn"><span class="ln">浅层</span> 语法、词性 — 识别助词、代词等基础结构</div>
+            <div class="lblk sem"><span class="ln">中层</span> 语义、短语 — 把词组理解为整体概念</div>
+            <div class="lblk log"><span class="ln">深层</span> 逻辑、推理 — 因果关系等复杂判断</div>
+          </div>
+          <table class="mtbl" style="margin-bottom:8px">
+            <thead>
+              <tr>
+                <th>模型</th>
+                <th>层数</th>
+                <th>参数</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Qwen3.5-0.8B</strong></td>
+                <td>24</td>
+                <td>8 亿</td>
+              </tr>
+              <tr>
+                <td><strong>LLaMA 3.1-8B</strong></td>
+                <td>32</td>
+                <td>80 亿</td>
+              </tr>
+              <tr>
+                <td><strong>Qwen3.5-397B</strong></td>
+                <td>60</td>
+                <td>3970 亿 (MoE)</td>
+              </tr>
+              <tr>
+                <td><strong>DeepSeek V4-Pro</strong></td>
+                <td>未公开</td>
+                <td>1.6 万亿 (MoE)</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="dark-box">
+            <div class="dt">每生成 1 个 token，都要穿越所有层</div>
+            <div class="dr">"你好" <span class="dd">&rarr; L1&rarr;...&rarr;LN &rarr;</span> "你"</div>
+            <div class="dr">"你好你" <span class="dd">&rarr; L1&rarr;...&rarr;LN &rarr;</span> "好"</div>
+            <div class="dr" style="margin-top:4px;color:#cc785c;font-weight:600">100 token = 100 &times; N 层 &mdash;
+              生成比理解慢得多</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ Tab 4: Prefill/Decode — 级联依赖 + 因果掩码 + KV Cache ═══════ -->
+    <!-- ═══════ T4: 推理两段 ═══════ -->
+    <div class="tab-panel" id="t4">
+
+      <!-- Card A: 端到端流程对比 — Prefill vs Decode -->
+      <div class="card">
+        <div class="sec-name">推理两段：Prefill X[N&times;d] 全量穿越 N 层，Decode X[1&times;d] 单行接力</div>
+        <!-- Prefill -->
+        <div style="margin-bottom:20px">
+          <div
+            style="font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:500;color:#cc785c;margin-bottom:10px;padding-left:10px;border-left:3px solid #cc785c">
+            Prefill 预填充 — 整段 prompt 一次产出第一个字 + 填满 KV Cache</div>
+          <div
+            style="display:flex;align-items:center;justify-content:center;gap:5px;flex-wrap:wrap;font-size:11px;font-family:'JetBrains Mono',monospace;margin-bottom:8px">
+            <span
+              style="background:#f5f0e8;border:1px solid #e6dfd8;border-radius:5px;padding:3px 8px;color:#141413;font-weight:500">喜欢</span><span
+              style="background:#f5f0e8;border:1px solid #e6dfd8;border-radius:5px;padding:3px 8px;color:#141413;font-weight:500">唱</span><span
+              style="background:#f5f0e8;border:1px solid #e6dfd8;border-radius:5px;padding:3px 8px;color:#141413;font-weight:500">跳</span>
+            <span style="color:#cc785c;font-weight:700">&rarr;</span>
+            <span
+              style="background:#181715;color:#4ade80;border-radius:5px;padding:3px 8px;font-weight:600">Embedding</span>
+            <span style="color:#cc785c;font-weight:700">&rarr;</span>
+            <span
+              style="background:rgba(167,139,250,.1);border:1px solid var(--q);border-radius:5px;padding:3px 8px;color:var(--q);font-weight:600">X
+              [3,d]</span>
+            <span style="color:#cc785c;font-weight:700">&rarr;</span>
+            <span
+              style="border:1px solid #e6dfd8;border-radius:5px;padding:3px 8px;color:#6c6a64">L1&rarr;...&rarr;L<sub>N</sub></span>
+            <span style="color:#cc785c;font-weight:700">&rarr;</span>
+            <span
+              style="background:rgba(16,185,129,.1);border:1px solid var(--green);border-radius:5px;padding:3px 8px;color:var(--green);font-weight:600">O
+              [3,d]</span>
+            <span style="color:#cc785c;font-weight:700">&rarr;</span>
+            <span
+              style="background:rgba(204,120,92,.1);border:1px solid #cc785c;border-radius:5px;padding:3px 8px;color:#cc785c;font-weight:600">取末行</span>
+            <span style="color:#cc785c;font-weight:700">&rarr;</span>
+            <span
+              style="background:#181715;color:#faf9f5;border-radius:5px;padding:3px 8px;font-weight:600">Unembedding</span>
+            <span style="color:#cc785c;font-weight:700">&rarr;</span>
+            <span style="background:var(--v);color:#fff;border-radius:5px;padding:4px 12px;font-weight:700">篮球</span>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+            <div
+              style="background:#fffbf7;border:1px solid #ffd9b3;border-radius:8px;padding:6px 12px;font-size:11px;color:#6c6a64;max-width:340px">
+              <strong style="color:#141413">X 形状：</strong>N 个 token → [N,d]。每层输出 [N,d] 作为下一层输入。</div>
+            <div
+              style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:6px 12px;font-size:11px;color:#6c6a64;max-width:340px">
+              <strong style="color:#059669">产出：</strong>第一个 token + 所有层所有位置的 K,V 填入 KV Cache</div>
+          </div>
+        </div>
+        <div style="height:1px;background:#e6dfd8;margin:0 40px 16px"></div>
+        <!-- Decode -->
+        <div>
+          <div
+            style="font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:500;color:#059669;margin-bottom:10px;padding-left:10px;border-left:3px solid #059669">
+            Decode 解码 — 每次只送入一个新 token，自回归循环生成</div>
+          <div
+            style="display:flex;align-items:center;justify-content:center;gap:5px;flex-wrap:wrap;font-size:11px;font-family:'JetBrains Mono',monospace;margin-bottom:8px">
+            <span style="background:var(--v);color:#fff;border-radius:5px;padding:4px 12px;font-weight:700">篮球</span>
+            <span style="color:#059669;font-weight:700">&rarr;</span>
+            <span
+              style="background:#181715;color:#4ade80;border-radius:5px;padding:3px 8px;font-weight:600">Embedding</span>
+            <span style="color:#059669;font-weight:700">&rarr;</span>
+            <span
+              style="background:rgba(16,185,129,.08);border:1.5px solid var(--green);border-radius:5px;padding:3px 8px;color:var(--green);font-weight:700">X
+              [1,d]</span>
+            <span style="color:#059669;font-weight:700">&rarr;</span>
+            <span
+              style="border:1px solid #e6dfd8;border-radius:5px;padding:3px 8px;color:#6c6a64">L1&rarr;...&rarr;L<sub>N</sub></span>
+            <span
+              style="background:rgba(56,189,248,.08);border-radius:5px;padding:2px 5px;font-size:10px;color:var(--k);font-weight:500">+KV
+              Cache</span>
+            <span style="color:#059669;font-weight:700">&rarr;</span>
+            <span
+              style="background:rgba(16,185,129,.1);border:1px solid var(--green);border-radius:5px;padding:3px 8px;color:var(--green);font-weight:600">[1,d]</span>
+            <span style="color:#059669;font-weight:700">&rarr;</span>
+            <span
+              style="background:#181715;color:#faf9f5;border-radius:5px;padding:3px 8px;font-weight:600">Unembedding</span>
+            <span style="color:#059669;font-weight:700">&rarr;</span>
+            <span style="background:var(--v);color:#fff;border-radius:5px;padding:4px 12px;font-weight:700">music</span>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+            <div
+              style="background:rgba(16,185,129,.05);border:1px solid #bbf7d0;border-radius:8px;padding:6px 12px;font-size:11px;color:#6c6a64;max-width:340px">
+              <strong style="color:#059669">X 形状：</strong>仅一个新 token → [1,d]。<strong
+                style="color:#141413">不是"末行"，是本就一行。</strong></div>
+            <div
+              style="background:#f1f6fb;border:1px solid #cfe0f0;border-radius:8px;padding:6px 12px;font-size:11px;color:#6c6a64;max-width:340px">
+              <strong style="color:#2563eb">历史靠 KV Cache：</strong>这一行 Q 查缓存中所有旧 K，提取旧 V。历史信息不在 X 里。</div>
+          </div>
+        </div>
+        <div class="ins" style="margin-top:12px">两阶段走<strong>完全相同</strong>的 Embedding → N 层 Transformer → Unembedding
+          路径。差异只在输入行数。</div>
+      </div>
+
+      <!-- Card D: 级联依赖 + KV Cache -->
+      <div class="two-col" style="margin-bottom:18px">
+        <!-- 级联依赖 -->
+        <div class="card" style="margin-bottom:0">
+          <div class="sec-name">级联依赖：为什么 Prefill 必须算全部 Q</div>
+          <div style="display:flex;flex-direction:column;gap:16px;align-items:center;margin-bottom:16px">
+            <div style="display:flex;align-items:center;gap:8px;font-size:11px;font-family:'JetBrains Mono',monospace">
+              <span style="color:#8e8b82;min-width:48px">Layer 1</span>
+              <span style="color:#141413;font-weight:600">Q<sub>1</sub>,Q<sub>2</sub>,Q<sub>3</sub></span>
+              <span style="color:#cc785c;font-weight:700">&rarr;</span>
+              <span
+                style="background:rgba(167,139,250,.1);border:1px solid var(--q);border-radius:4px;padding:1px 5px;font-size:9px;color:var(--q)">O<sub>1</sub>,O<sub>2</sub>,O<sub>3</sub></span>
+            </div>
+            <div style="font-size:12px;color:#8e8b82">&darr; 作为 L2 的输入</div>
+            <div style="display:flex;align-items:center;gap:8px;font-size:11px;font-family:'JetBrains Mono',monospace">
+              <span style="color:#8e8b82;min-width:48px">Layer 2</span>
+              <span style="color:#141413;font-weight:600">Q<sub>1</sub>,Q<sub>2</sub>,Q<sub>3</sub></span>
+              <span style="color:#cc785c;font-weight:700">&rarr;</span>
+              <span
+                style="background:rgba(167,139,250,.1);border:1px solid var(--q);border-radius:4px;padding:1px 5px;font-size:9px;color:var(--q)">O<sub>1</sub>,O<sub>2</sub>,O<sub>3</sub></span>
+            </div>
+            <div style="font-size:12px;color:#8e8b82">&darr; 层层传递</div>
+            <div style="display:flex;align-items:center;gap:8px;font-size:11px;font-family:'JetBrains Mono',monospace">
+              <span style="color:#8e8b82;min-width:48px">Layer N</span>
+              <span style="color:#141413;font-weight:600">Q<sub>1</sub>,Q<sub>2</sub>,Q<sub>3</sub></span>
+              <span style="color:#cc785c;font-weight:700">&rarr;</span>
+              <span
+                style="background:rgba(16,185,129,.15);border:1px solid var(--green);border-radius:4px;padding:1px 5px;font-size:9px;color:var(--green);font-weight:700">只取
+                O<sub>3</sub></span>
+            </div>
+          </div>
+          <div class="ins" style="font-size:12px">Token 3 在 Layer 2 的 Q = f( Layer 1 的<strong>全部</strong> O )。每层输出是下层输入
+            → 必须算全部 Q → 只有末层"收网"。</div>
+        </div>
+
+        <!-- KV Cache 机制 (融合因果掩码+T9+T10) -->
+        <div class="card" style="margin-bottom:0">
+          <div class="sec-name">KV Cache：因果掩码保证的免费午餐</div>
+          <div class="cmp" style="margin-bottom:8px;gap:8px">
+            <div class="cmp-s bad" style="padding:12px 10px">
+              <div class="st" style="font-size:12px">没有缓存</div>
+              <div class="cmp-r"><span class="lt">L1</span> 重算全部 QKV</div>
+              <div class="cmp-r"><span class="lt">...</span></div>
+              <div class="cmp-r"><span class="lt">LN</span> 重算全部 QKV</div>
+              <div class="cmp-tot" style="font-size:11px">N &times; 全量</div>
+            </div>
+            <div class="cmp-s good" style="padding:12px 10px">
+              <div class="st" style="font-size:12px">有缓存</div>
+              <div class="cmp-r"><span class="lt">L1</span> 只算新增 QKV</div>
+              <div class="cmp-r"><span class="lt">...</span></div>
+              <div class="cmp-r"><span class="lt">LN</span> 只算新增 QKV</div>
+              <div class="cmp-tot" style="font-size:11px">快 70%+</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;justify-content:center">
+            <div
+              style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:#8e8b82;text-decoration:line-through">
+              Q</div>
+            <span style="font-size:12px;color:#8e8b82">老 Q 用完即弃</span>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:#059669">K &sdot; V
+            </div>
+            <span style="font-size:12px;color:#8e8b82">每次都要查</span>
+          </div>
+          <div class="fm" style="font-size:12px;margin-bottom:8px">
+            Output = softmax( <span class="fq">q_N</span> &times; <span class="fk">K_1..N-1</span><sup>T</sup> /
+            &radic;d ) &times; <span class="fv">V_1..N-1</span>
+          </div>
+          <!-- 因果掩码下三角矩阵演示 -->
+          <div style="text-align:center;margin-bottom:8px">
+            <div style="font-size:11px;font-weight:600;color:#8e8b82;margin-bottom:6px">因果掩码 — 下三角矩阵（-&infin; 处被遮挡）</div>
+            <div class="mask-g">
+              <div class="m hd"></div><div class="m hd">我</div><div class="m hd">爱</div><div class="m hd">北</div><div class="m hd">京</div>
+              <div class="m hd">我</div><div class="m ok">0.8</div><div class="m no">-&infin;</div><div class="m no">-&infin;</div><div class="m no">-&infin;</div>
+              <div class="m hd">爱</div><div class="m ok">0.4</div><div class="m ok">0.9</div><div class="m no">-&infin;</div><div class="m no">-&infin;</div>
+              <div class="m hd">北</div><div class="m ok">0.2</div><div class="m ok">0.4</div><div class="m ok">0.8</div><div class="m no">-&infin;</div>
+              <div class="m hd">京</div><div class="m ok">0.1</div><div class="m ok">0.3</div><div class="m ok">0.4</div><div class="m fc">0.9</div>
+            </div>
+            <div style="font-size:10px;color:#8e8b82;margin-top:6px">只有最后一行能看到全部上下文，"我"只看自己，"京"能看到所有。Softmax(-&infin;)=0</div>
+          </div>
+          <div class="ins" style="font-size:11px;text-align:center">
+            <strong>因果掩码</strong>锁死"老 token 看不到新 token" &rarr; 老 K/V <strong>一个数字不变</strong> &rarr; 缓存永久有效
+            <span class="badge g" style="margin-left:8px">省 33%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card E: 三个关键澄清 -->
+      <div class="card">
+        <div class="sec-name">三个容易混淆的关键点，以及 Unembedding 层</div>
+        <div class="three-col">
+          <div class="col soft">
+            <h3>Decode 不是"取最后一行"</h3>
+            <div class="t" style="font-size:11px;line-height:1.55">
+              Prefill: X [N,d] → 末层取末行 [1,d]。<br>
+              Decode: X [1,d] 进 [1,d] 出，<strong style="color:#cc785c">本就一行</strong>，不必"取"。<br>
+              每步只送入一个新 token 的 embedding。
+            </div>
+          </div>
+          <div class="col warm">
+            <h3>每个 token 都先过 Embedding</h3>
+            <div class="t" style="font-size:11px;line-height:1.55">
+              第 500 个生成 token 也得查表转向量。<br>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#8e8b82">token_id → Embedding[id]
+                → [1,d]</span><br>
+              前面 token 的信息全在<strong> KV Cache</strong> 里。
+            </div>
+          </div>
+          <div class="col cool">
+            <h3>Unembedding 层</h3>
+            <div class="t" style="font-size:11px;line-height:1.55">
+              末行 [1,d] &times; W<sub>vocab</sub><sup>T</sup> [d,V] = Logits [1,V]<br>
+              V = 词汇表大小（几万～几十万）。<br>
+              通常与 Embedding <strong>共享权重</strong>。
+            </div>
+          </div>
+        </div>
+        <div class="dark-box" style="margin-top:14px">
+          <div class="dt">常见误解 vs 实际</div>
+          <div style="font-size:12px;line-height:1.5;color:#a09d96">
+            <span style="color:#f87171">误解：</span>缓存命中 → 系统把缓存文本塞回 prompt → LLM 重算<br>
+            <span style="color:#10b981">实际：</span>缓存命中 → 直接加载 K/V 矩阵到 GPU → <strong style="color:#faf9f5">只算新增
+              token</strong>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ═══════ Tab 5: 输出 — Unembedding + Logits + Softmax + 温度采样 ═══════ -->
+    <!-- ═══════ T5: 输出 ═══════ -->
+    <div class="tab-panel" id="t5">
+      <div class="card">
+        <div class="sec-name">最后一个 token 的输出如何变成一个词</div>
+        <div class="two-col">
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <div
+                style="width:26px;height:26px;border-radius:50%;background:#cc785c;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                1</div>
+              <span style="font-size:13px;color:#3d3d3a"><strong>取末行</strong> — 因果掩码下唯一有完整上下文的行</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div
+                style="width:26px;height:26px;border-radius:50%;background:#cc785c;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                2</div>
+              <span style="font-size:13px;color:#3d3d3a"><strong>x Unembedding 层 (W_vocab)</strong> &rarr; Logits &rarr;
+                每个候选词的分数</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div
+                style="width:26px;height:26px;border-radius:50%;background:#cc785c;color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                3</div>
+              <span style="font-size:13px;color:#3d3d3a"><strong>Softmax &rarr; 概率分布 &rarr; 采样</strong> —
+                贪心/随机/温度控制</span>
+            </div>
+          </div>
+          <div class="col warm">
+            <h3>Temperature 温度</h3>
+            <div class="t">Softmax 前除以 T：<strong>T=1</strong> 保持原分布；<strong>T&lt;1</strong>
+              尖锐、保守；<strong>T&gt;1</strong> 平坦、创意；<strong>T=0</strong> 退化为贪心选最大</div>
+          </div>
+        </div>
+        <div class="temp-row" style="margin-top:12px">
+          <div class="temp-item lo">
+            <div class="tl">T=0.5</div>
+            <div style="font-size:12px;color:#3d3d3a">"你好" <strong>89%</strong></div>
+            <div style="font-size:10px;color:#8e8b82">几乎固定</div>
+          </div>
+          <div class="temp-item mid">
+            <div class="tl">T=1.0</div>
+            <div style="font-size:12px;color:#3d3d3a">"你好" <strong>70%</strong></div>
+            <div style="font-size:10px;color:#8e8b82">保持分布</div>
+          </div>
+          <div class="temp-item hi">
+            <div class="tl">T=1.5</div>
+            <div style="font-size:12px;color:#3d3d3a">"你好" <strong>45%</strong> "干啥" 7%</div>
+            <div style="font-size:10px;color:#8e8b82">更多可能</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ Tab 6: 总结 — 完整路径图：注意力→Embedding→Q/K/V→推理→输出→Prompt Cache ═══════ -->
+    <!-- ═══════ T6: 总结 ═══════ -->
+    <div class="tab-panel" id="t6">
+      <div class="card">
+        <div class="sec-name" style="margin-bottom:24px">探索地图：从账单到原理，六站通透</div>
+        <div class="path">
+          <div class="path-start">
+            <div class="path-dot start"></div>
+            <div class="path-label start">账单疑惑<br>「缓存命中」是什么</div>
+          </div>
+          <div class="path-leg right">
+            <div class="path-arrow r"></div>
+            <div class="path-node">
+              <div class="pn">01</div>
+              <div class="pname">注意力机制</div>
+              <div class="pinsight">词间关系分数 &rarr; 加权融合</div>
+              <div class="pmath">O(n&sup2;)</div>
+            </div>
+          </div>
+          <div class="path-leg right">
+            <div class="path-arrow r"></div>
+            <div class="path-node">
+              <div class="pn">02</div>
+              <div class="pname">Embedding</div>
+              <div class="pinsight">词 &rarr; 向量（查表）&rarr; x W 投影</div>
+              <div class="pmath">Embed + Linear</div>
+            </div>
+          </div>
+          <div class="path-leg right">
+            <div class="path-arrow r"></div>
+            <div class="path-node">
+              <div class="pn">03</div>
+              <div class="pname">Q / K / V</div>
+              <div class="pinsight">三个角色，由 X&times;W 并行生成</div>
+              <div class="pmath">Q&times;K<sup>T</sup></div>
+            </div>
+          </div>
+          <div class="path-leg down">
+            <div class="path-arrow d"></div>
+            <div class="path-node keynote">
+              <div class="pn">04</div>
+              <div class="pname">推理两段</div>
+              <div class="pinsight">Prefill [N,d] → Decode [1,d] + KV Cache</div>
+              <div class="pmath">矩阵+层堆叠</div>
+            </div>
+          </div>
+          <div class="path-leg right">
+            <div class="path-arrow r"></div>
+            <div class="path-node">
+              <div class="pn">05</div>
+              <div class="pname">输出</div>
+              <div class="pinsight">Unembedding &rarr; Logits &rarr; Softmax &rarr; 采样</div>
+              <div class="pmath">Softmax(x/T)</div>
+            </div>
+          </div>
+          <div class="path-leg right">
+            <div class="path-arrow r"></div>
+            <div class="path-node">
+              <div class="pn">06</div>
+              <div class="pname">KV Cache</div>
+              <div class="pinsight">因果掩码锁死历史 &rarr; K/V 永久复用</div>
+              <div class="pmath">省 33% 显存</div>
+            </div>
+          </div>
+          <div class="path-leg right">
+            <div class="path-arrow r"></div>
+            <div class="path-node final">
+              <div class="pn">07</div>
+              <div class="pname">Prompt Cache</div>
+              <div class="pinsight">跨请求复用 K/V &rarr; 跳过整个 Prefill</div>
+              <div class="pmath">命中 = 便宜</div>
+            </div>
+          </div>
+        </div>
+        <div class="ins" style="margin-top:24px;max-width:680px;margin-left:auto;margin-right:auto">
+          <strong>整个链条：</strong>注意力机制（O(n&sup2;) 动机）&rarr; Embedding + W 投影 &rarr; Q/K/V &rarr; 推理两段（矩阵计算 + 层堆叠 + 级联依赖 +
+          KV Cache）&rarr; Unembedding 输出 &rarr; Prompt Cache 跨请求省 Prefill<br>
+          从账单上一行字开始，<strong>一路不过是线性代数</strong>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══ JavaScript：矩阵格子生成 + Tab 切换 ═══ -->
+  <script>
+    function grid(id, rows, cols, cls, opts) {
+      opts = opts || {};
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.style.gridTemplateColumns = 'repeat(' + cols + ',1fr)';
+      for (var r = 0; r < rows; r++) {
+        for (var c = 0; c < cols; c++) {
+          var cell = document.createElement('div');
+          var k = cls;
+          if (opts.newRow !== undefined && r === opts.newRow) k = opts.newCls || cls;
+          if (opts.newCol !== undefined && c === opts.newCol) k = opts.newCls || cls;
+          cell.className = 'c ' + k;
+          el.appendChild(cell);
+        }
+      }
+    }
+    grid('g-q', 6, 4, 'q');
+    grid('g-kt', 4, 6, 'k');
+    grid('g-score', 6, 6, 's');
+    grid('g-v', 6, 4, 'v');
+    grid('g-out', 6, 4, 'o');
+    grid('g-qd', 1, 4, 'q');
+    grid('g-kd', 4, 7, 'k', { newCol: 6, newCls: 'newk' });
+    grid('g-scored', 1, 7, 's');
+    grid('g-vd', 7, 4, 'v', { newRow: 6, newCls: 'new' });
+    grid('g-outd', 1, 4, 'o');
+
+    document.querySelectorAll('.tab-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var t = this.dataset.t;
+        document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.toggle('active', b === btn); });
+        document.querySelectorAll('.tab-panel').forEach(function (p) { p.classList.toggle('active', p.id === t); });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    });
+  </script>
+</body>
+
+</html>
