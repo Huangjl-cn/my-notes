@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>从 Clash 开始，扫清计算机网络盲区</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ── Linear Design Tokens ── */
+:root {
+  --primary: #5e6ad2;
+  --primary-hover: #828fff;
+  --on-primary: #ffffff;
+  --ink: #f7f8f8;
+  --ink-muted: #d0d6e0;
+  --ink-subtle: #8a8f98;
+  --ink-tertiary: #62666d;
+  --canvas: #010102;
+  --surface-1: #0f1011;
+  --surface-2: #141516;
+  --surface-3: #18191a;
+  --surface-4: #191a1b;
+  --hairline: #23252a;
+  --hairline-strong: #34343a;
+  --success: #27a644;
+  --error: #e5484d;
+  --warning: #e8a55a;
+  --font-display: 'Inter', -apple-system, 'PingFang SC', 'Segoe UI', sans-serif;
+  --font-body: 'Inter', -apple-system, 'PingFang SC', 'Segoe UI', sans-serif;
+  --font-code: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+}
+
+/* ── Reset ── */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: var(--font-body);
+  background: var(--canvas);
+  color: var(--ink-muted);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Top Accent Line ── */
+body::after {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--primary);
+  z-index: 999;
+}
+
+/* ── Topbar ── */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(1,1,2,0.92);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 13px;
+}
+.topbar .back {
+  color: var(--ink-subtle);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color .2s;
+}
+.topbar .back:hover { color: var(--primary); }
+.topbar .sep { width: 1px; height: 14px; background: var(--hairline); }
+.topbar .tag { color: var(--ink-tertiary); font-weight: 400; letter-spacing: 0.5px; font-size: 11px; }
+.topbar .tag strong { color: var(--ink-subtle); font-weight: 500; }
+
+/* ── Hero ── */
+.hero {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 64px 24px 36px;
+  text-align: center;
+  animation: fadeIn 0.5s ease-out both;
+}
+.hero h1 {
+  font-family: var(--font-display);
+  font-size: 42px;
+  font-weight: 600;
+  letter-spacing: -1px;
+  line-height: 1.12;
+  color: var(--ink);
+  max-width: 1200px;
+  margin: 0 auto 14px;
+}
+.hero .sub {
+  font-size: 15px;
+  color: var(--ink-subtle);
+  line-height: 1.55;
+  max-width: 540px;
+  margin: 0 auto;
+}
+.hero .rule {
+  width: 36px;
+  height: 3px;
+  background: var(--primary);
+  margin: 22px auto 0;
+  border-radius: 2px;
+}
+
+/* ── Keyframes ── */
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Tabs ── */
+.tabs-wrap {
+  position: sticky;
+  top: 41px;
+  z-index: 99;
+  background: rgba(1,1,2,0.92);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--hairline);
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 10px 24px;
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+  align-items: center;
+  justify-content: center;
+}
+.tab-btn {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-subtle);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .2s;
+  white-space: nowrap;
+}
+.tab-btn:hover { border-color: var(--primary); color: var(--ink); }
+.tab-btn.active { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+.tab-arrow {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--ink-tertiary);
+  font-weight: 500;
+  padding: 0 4px;
+  user-select: none;
+}
+
+/* ── Content ── */
+.content {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 28px 24px 60px;
+  width: 100%;
+}
+.tab-panel { display: none; animation: fadeIn .25s ease-out; }
+.tab-panel.active { display: block; }
+
+/* ── Card ── */
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 28px;
+  margin-bottom: 14px;
+}
+.sec-name {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.4px;
+  color: var(--ink);
+  margin-bottom: 16px;
+  padding-left: 13px;
+  border-left: 3px solid var(--primary);
+}
+.card p {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--ink-muted);
+  margin-bottom: 12px;
+}
+.card p:last-child { margin-bottom: 0; }
+.card p strong { color: var(--ink); font-weight: 500; }
+
+/* ── Code ── */
+code {
+  font-family: var(--font-code);
+  font-size: 12.5px;
+  background: var(--surface-2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--ink-muted);
+  border: 1px solid var(--hairline);
+}
+
+/* ── Dark Box ── */
+.dark-box {
+  background: var(--canvas);
+  border-radius: 10px;
+  padding: 16px 18px;
+  color: var(--ink-muted);
+  margin: 12px 0;
+  overflow-x: auto;
+  border: 1px solid var(--hairline);
+}
+.dark-box .dt {
+  font-size: 10.5px;
+  color: var(--primary);
+  font-weight: 600;
+  margin-bottom: 8px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+.dark-box .dr {
+  font-family: var(--font-code);
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--ink-subtle);
+  white-space: pre-wrap;
+  text-align: left;
+}
+.dark-box .dr .hl { color: var(--primary); }
+.dark-box .dr .g { color: var(--success); }
+.dark-box .dr .o { color: var(--warning); }
+
+/* ── Insight Box ── */
+.ins {
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--ink-subtle);
+  text-align: center;
+  margin: 12px 0;
+  line-height: 1.6;
+  border: 1px solid var(--hairline);
+}
+.ins strong { color: var(--ink); font-weight: 500; }
+.ins .accent { color: var(--primary); }
+
+/* ── Compare Two-Col ── */
+.cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+.cmp-s { border-radius: 12px; padding: 18px 16px; border: 1px solid var(--hairline);
+  background: var(--surface-2); }
+.cmp-s .st { font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 8px; }
+.cmp-s ul { list-style: none; padding: 0; font-size: 13px; line-height: 1.65; }
+.cmp-s ul li { padding: 2px 0; color: var(--ink-muted); }
+.cmp-s ul li::before { content: '· '; color: var(--ink-tertiary); }
+.cmp-s .cmp-tot { margin-top: 10px; font-weight: 600; font-size: 14px; text-align: center; }
+.cmp-s.bad { border-left: 3px solid var(--warning); }
+.cmp-s.good { border-left: 3px solid var(--success); }
+
+/* ── Compare Table (TUN vs 系统代理) ── */
+.mtbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 12px 0;
+}
+.mtbl thead th {
+  background: var(--surface-2);
+  color: var(--ink);
+  font-weight: 500;
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--hairline-strong);
+  font-size: 12.5px;
+}
+.mtbl tbody td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--ink-muted);
+}
+.mtbl tbody td:first-child { color: var(--ink); font-weight: 500; }
+.mtbl tbody tr:last-child td { border-bottom: none; }
+.mtbl tbody tr:hover { background: var(--surface-2); }
+.mtbl code { font-size: 11.5px; }
+
+/* ── Three Column ── */
+.three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 12px 0; }
+.three-col .col {
+  border-radius: 10px;
+  padding: 16px 14px;
+  text-align: center;
+  border: 1px solid var(--hairline);
+  background: var(--surface-2);
+}
+.three-col .col .cl { font-family: var(--font-code); font-size: 15px; font-weight: 600; margin-bottom: 6px; color: var(--ink); }
+.three-col .col .cd { font-size: 12.5px; color: var(--ink-subtle); line-height: 1.5; }
+
+/* ── Flow Steps ── */
+.flow-steps { display: flex; flex-direction: column; gap: 2px; margin: 12px 0; }
+.flow-step {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 5px 0;
+}
+.flow-step .num {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600; color: var(--ink-subtle);
+  flex-shrink: 0;
+}
+.flow-step .fs-text { font-size: 13px; color: var(--ink-muted); line-height: 1.55; padding-top: 2px; }
+.flow-step .fs-text strong { color: var(--ink); }
+
+/* ── Two-Col ── */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 12px 0; }
+.two-col .col-card {
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 16px;
+  border: 1px solid var(--hairline);
+}
+.two-col .col-card .cc-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+.two-col .col-card .dark-box { margin: 0; }
+
+/* ── Path Diagram ── */
+.path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 24px 0 16px;
+}
+.path-leg { display: flex; align-items: center; gap: 6px; }
+.path-node {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 9px 12px;
+  min-width: 78px;
+  text-align: center;
+}
+.path-node .pn {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--primary);
+  margin-bottom: 1px;
+  letter-spacing: 0.5px;
+}
+.path-node .pname {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.path-node .pmath {
+  font-size: 10px;
+  color: var(--ink-tertiary);
+  font-family: var(--font-code);
+  margin-top: 1px;
+}
+.path-arrow {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+.path-arrow::after {
+  content: '';
+  display: block;
+  border-left: 5px solid var(--primary);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+}
+
+/* ── Full Flow Chain ── */
+.flow-chain { margin: 16px 0; }
+.chain-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+.chain-step .cs-num {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline-strong);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 600; color: var(--ink-tertiary);
+  flex-shrink: 0;
+}
+.chain-step .cs-label {
+  font-size: 12.5px;
+  color: var(--ink-muted);
+  line-height: 1.4;
+}
+.chain-step .cs-label strong { color: var(--ink); font-weight: 500; }
+.chain-step .cs-label .tag-accent { color: var(--primary); font-weight: 500; }
+.chain-step .cs-label .tag-green { color: var(--success); }
+.chain-step .vline {
+  width: 1px;
+  height: 10px;
+  background: var(--hairline);
+  margin-left: 10px;
+}
+
+/* ── Route Table Visual ── */
+.route-grid { font-family: var(--font-code); font-size: 11px; line-height: 1.6; margin: 10px 0; }
+.route-grid .rg-row { display: flex; gap: 8px; padding: 2px 0; }
+.route-grid .rg-row .rg-dest { color: var(--ink); min-width: 90px; }
+.route-grid .rg-row .rg-mask { color: var(--ink-subtle); min-width: 95px; }
+.route-grid .rg-row .rg-gw { color: var(--warning); min-width: 80px; }
+.route-grid .rg-row .rg-iface { color: var(--primary); min-width: 80px; }
+.route-grid .rg-row .rg-metric { color: var(--ink-tertiary); min-width: 30px; text-align: right; }
+.route-grid .rg-hdr { color: var(--ink-tertiary); font-size: 10px; letter-spacing: 0.5px; margin-bottom: 4px; }
+
+/* ── Badge ── */
+.badge {
+  display: inline-block;
+  background: var(--surface-2);
+  color: var(--ink-subtle);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  margin: 2px;
+  border: 1px solid var(--hairline);
+}
+.badge.primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+.badge.g { background: rgba(39,166,68,0.15); color: var(--success); border-color: transparent; }
+
+/* ── Responsive ── */
+@media (max-width: 760px) {
+  .hero { padding: 40px 16px 24px; }
+  .hero h1 { font-size: 28px; letter-spacing: -0.6px; }
+  .hero .sub { font-size: 14px; }
+  .content { padding: 20px 14px 40px; }
+  .card { padding: 20px 16px; }
+  .sec-name { font-size: 18px; }
+  .cmp { grid-template-columns: 1fr; }
+  .three-col { grid-template-columns: 1fr; }
+  .two-col { grid-template-columns: 1fr; }
+  .tabs-wrap { justify-content: flex-start; }
+  .path { flex-direction: column; align-items: stretch; }
+  .path-leg { justify-content: flex-start; }
+  .path-arrow { transform: rotate(90deg); }
+  .route-grid .rg-row { flex-wrap: wrap; gap: 2px 8px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ Topbar ═══ -->
+<div class="topbar">
+  <a class="back" href="../index.html">&larr; 首页</a>
+  <div class="sep"></div>
+  <span class="tag"><strong>网络</strong> &middot; Clash &middot; 路由 &middot; 代理</span>
+</div>
+
+<!-- ═══ Hero ═══ -->
+<div class="hero">
+  <h1>从 Clash 开始，把计算机网络的盲区扫了一遍</h1>
+  <div class="sub">一个 npm 的慢字，引出的路由表、代理原理与网络层的全线复盘</div>
+  <div class="rule"></div>
+</div>
+
+<!-- ═══ Tab Navigation ═══ -->
+<div class="tabs-wrap">
+  <button class="tab-btn active" data-t="t1">引子</button>
+  <span class="tab-arrow">&rarr;</span>
+  <button class="tab-btn" data-t="t2">代理机制</button>
+  <span class="tab-arrow">&rarr;</span>
+  <button class="tab-btn" data-t="t3">路由表</button>
+  <span class="tab-arrow">&rarr;</span>
+  <button class="tab-btn" data-t="t4">网络原理</button>
+  <span class="tab-arrow">&rarr;</span>
+  <button class="tab-btn" data-t="t5">全流程</button>
+  <span class="tab-arrow">&rarr;</span>
+  <button class="tab-btn" data-t="t6">总结</button>
+</div>
+
+<!-- ═══ Content ═══ -->
+<div class="content">
+
+  <!-- ════════════ Tab 1: 引子 ════════════ -->
+  <div class="tab-panel active" id="t1">
+    <div class="card">
+      <div class="sec-name">一切从一个迫在眉睫的需求开始</div>
+      <p>那天我需要下载 npm 包，速度十分缓慢。启动 <strong>Clash for Windows</strong>，打开界面那一刻——全局、规则、直连、脚本、TUN 模式、系统代理、TAP、虚拟网卡……密密麻麻的概念一股脑涌上来。</p>
+      <p>我开启了系统代理，终端似乎并没有成功代理，感觉很疑惑。这些模式到底是啥？规则是本地定的还是服务器定的？TUN 和系统代理有什么区别？</p>
+      <div class="ins"><strong>这些问题不搞清楚，出了岔子我连从哪下手排查都不知道。</strong></div>
+    </div>
+
+    <div class="card">
+      <div class="sec-name">规则模式：决策发生在哪？</div>
+      <p>直觉以为"规则是不是到了 VPN 服务器之后，由服务器来判断"。这个直觉是错的——<strong>四个模式全部是本地策略</strong>，在流量发出之前就已经决定了。</p>
+
+      <div class="dark-box">
+        <div class="dt">四种代理模式（全部本地决策）</div>
+        <div class="dr">直连 ──→ 所有流量直接发出，不走代理
+全局 ──→ 所有流量都走代理节点
+
+规则 ──→ 按规则集动态判断（国内直连 / 国外代理）
+  例：geoip:cn → 直连
+      DOMAIN-SUFFIX:google.com → 代理
+
+脚本 ──→ 用 JS 自定义路由逻辑</div>
+      </div>
+      <div class="ins"><code>全部在本地 Clash 内核中判断，与 VPN 服务器无关</code></div>
+    </div>
+  </div>
+
+  <!-- ════════════ Tab 2: 代理机制 ════════════ -->
+  <div class="tab-panel" id="t2">
+    <div class="card">
+      <div class="sec-name">系统代理：温和的中间人</div>
+      <p>系统代理修改操作系统的代理设置，告诉浏览器"先经过 Clash 的本地端口"。只对 <strong>HTTP/HTTPS</strong> 的应用生效，命令行工具、游戏、UWP 应用不走系统代理设置，就绕过去了。</p>
+
+      <div class="two-col">
+        <div class="col-card">
+          <div class="cc-title">PAC 脚本层</div>
+          <div class="dark-box">
+            <div class="dr"><span class="hl">function</span> FindProxyForURL(url, host) {
+  <span class="hl">if</span> (dnsDomainIs(host, ".google.com"))
+    <span class="hl">return</span> "PROXY 127.0.0.1:7890";
+  <span class="hl">if</span> (isInNet(host, "10.0.0.0", "255.0.0.0"))
+    <span class="hl">return</span> "DIRECT";
+  <span class="hl">return</span> "PROXY 127.0.0.1:7890";
+}</div>
+          </div>
+        </div>
+        <div class="col-card">
+          <div class="cc-title">核心：HTTP 代理协议</div>
+          <div class="dark-box">
+            <div class="dr">浏览器 → TCP 连 127.0.0.1:7890
+  → 发送 CONNECT 指令：
+    <span class="o">"CONNECT www.google.com:443 HTTP/1.1"</span>
+  → 告诉 Clash 我要连哪
+  → Clash 收到后自己发起连接
+  → 两边数据透传</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ins"><strong>系统代理本质：</strong>中间人转发。不是修改 DNS，而是告诉每个应用"你的网络请求交给本地这个端口，它来替你发"。<strong>只有遵守系统代理设置的应用才会走这个通道。</strong></div>
+    </div>
+
+    <div class="card">
+      <div class="sec-name">TUN 模式：网络层拦截</div>
+      <p>创建虚拟网卡，在操作系统层面拦截 <strong>所有 IP 数据包</strong>——不论浏览器的 HTTP、命令行的 TCP 还是系统更新的 UDP，只要发了 IP 包都会被截住。</p>
+
+      <table class="mtbl">
+        <thead><tr><th></th><th>系统代理</th><th>TUN 模式</th></tr></thead>
+        <tbody>
+          <tr><td>层级</td><td>应用层</td><td>网络层（IP 层）</td></tr>
+          <tr><td>原理</td><td>修改系统代理设置</td><td>创建虚拟网卡拦截所有包</td></tr>
+          <tr><td>接管范围</td><td>仅 HTTP/HTTPS</td><td>所有 TCP/UDP 流量</td></tr>
+          <tr><td>命令行 / 游戏</td><td>不生效</td><td>生效</td></tr>
+          <tr><td>性能开销</td><td>轻量</td><td>稍高</td></tr>
+        </tbody>
+      </table>
+
+      <div class="ins"><strong>TUN ≠ 全局模式。</strong>TUN 解决的只是"哪些流量能进来"——所有 IP 包抓到 Clash 内核里后，按什么策略处理，还是由你选的模式（规则/全局/直连/脚本）来决定。TUN 只管"抓"，Clash 内核只管"判"。</div>
+    </div>
+
+    <div class="card">
+      <div class="sec-name">验证 TUN 是否工作</div>
+      <div class="two-col">
+        <div class="col-card">
+          <div class="cc-title">查看虚拟网卡</div>
+          <div class="dark-box">
+            <div class="dr">ipconfig | Select-String "Clash"
+
+Unknown adapter Clash:
+  IPv4 Address: 198.18.0.1
+  Subnet Mask:  255.255.0.0</div>
+          </div>
+        </div>
+        <div class="col-card">
+          <div class="cc-title">测试外网代理</div>
+          <div class="dark-box">
+            <div class="dr">curl.exe google.com
+  STATUS: 200
+  IP: 157.240.7.20
+  <span class="g">← 代理节点 IP，非 Google 原生 IP</span>
+
+curl.exe baidu.com
+  STATUS: 200
+  IP: 183.2.172.177
+  <span class="o">← 国内 IP，直连放行</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════ Tab 3: 路由表 ════════════ -->
+  <div class="tab-panel" id="t3">
+    <div class="card">
+      <div class="sec-name">路由表：认知震荡的开始</div>
+      <p><code>route print -4</code> 打出来的路由表，满屏的路由条目——一个全新的世界展开了：</p>
+      <div class="dark-box">
+        <div class="dt">IPv4 Route Table（节选）</div>
+        <div class="dr">Network Dest.    Netmask           Gateway       Interface      Metric
+  0.0.0.0        0.0.0.0          10.90.23.7    10.90.23.254     30
+  <span class="hl"> 1.0.0.0        255.0.0.0        198.18.0.2    198.18.0.1       0</span>
+  <span class="hl"> 2.0.0.0        254.0.0.0        198.18.0.2    198.18.0.1       0</span>
+  <span class="hl"> 4.0.0.0        252.0.0.0        198.18.0.2    198.18.0.1       0</span>
+  <span class="hl"> 8.0.0.0        248.0.0.0        198.18.0.2    198.18.0.1       0</span>
+  <span class="hl">16.0.0.0        240.0.0.0        198.18.0.2    198.18.0.1       0</span>
+  <span class="hl">32.0.0.0        224.0.0.0        198.18.0.2    198.18.0.1       0</span>
+  <span class="hl">64.0.0.0        192.0.0.0        198.18.0.2    198.18.0.1       0</span>
+  <span class="hl">128.0.0.0       128.0.0.0        198.18.0.2    198.18.0.1       0</span>
+  198.18.0.0      255.255.0.0      On-link        198.18.0.1       256</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="sec-name">Clash 的奇怪路由</div>
+      <p>Clash TUN 注册了一串看似古怪的路由——掩码不是标准的 /8、/16、/24，而是<strong>精心设计的一组覆盖</strong>：</p>
+      <div class="dark-box">
+        <div class="dt">掩码拆解</div>
+        <div class="dr">目标         掩码          二进制掩码                    范围
+1.0.0.0     255.0.0.0     11111111 00000000 00000000 00000000   1.x.x.x
+2.0.0.0     254.0.0.0     11111110 00000000 00000000 00000000   2.x.x.x ~ 3.x.x.x
+4.0.0.0     252.0.0.0     11111100 00000000 00000000 00000000   4.x.x.x ~ 7.x.x.x
+8.0.0.0     248.0.0.0     11111000 00000000 00000000 00000000   8.x.x.x ~ 15.x.x.x
+16.0.0.0    240.0.0.0     11110000 00000000 00000000 00000000  16.x.x.x ~ 31.x.x.x
+32.0.0.0    224.0.0.0     11100000 00000000 00000000 00000000  32.x.x.x ~ 63.x.x.x
+64.0.0.0    192.0.0.0     11000000 00000000 00000000 00000000  64.x.x.x ~ 127.x.x.x
+128.0.0.0   128.0.0.0     10000000 00000000 00000000 00000000  128.x.x.x ~ 255.x.x.x</div>
+      </div>
+      <p>八条路由拼起来覆盖了 <code>1.0.0.0 ~ 255.255.255.255</code>，几乎整个外网。</p>
+      <p>那为什么不直接写一条 <code>0.0.0.0/0</code>？<strong>两个原因：</strong></p>
+      <div class="cmp">
+        <div class="cmp-s bad">
+          <div class="st">避免冲突</div>
+          <ul><li>系统已有一条 <code>0.0.0.0/0 → WLAN</code></li><li>再加相同目标容易路由翻跳</li><li>睡眠唤醒后可能丢失</li><li>用不同目标避免冲突</li></ul>
+        </div>
+        <div class="cmp-s good">
+          <div class="st">破除死循环</div>
+          <ul><li>Clash 自己连代理节点的包</li><li>必须 <strong>绕过 TUN</strong></li><li>否则：Clash 发包 → TUN 拦截</li><li>→ Clash 内核又处理 → 死循环</li><li>多条路由更灵活做排除</li></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════ Tab 4: 网络原理 ════════════ -->
+  <div class="tab-panel" id="t4">
+    <div class="card">
+      <div class="sec-name">接口 vs 网关：先选门，再选门外的人</div>
+      <p>多年以来对网络流向的理解："我的电脑 → 网关（路由器）→ 外网"。但只有一个网卡时不出问题，出现了多个虚拟网卡后，就不得不思考"从哪个接口出去"。</p>
+
+      <div class="dark-box">
+        <div class="dt">路由表解析：先选门，再选门外的人</div>
+        <div class="dr">包 → 查路由表匹配到 192.168.18.5/32
+  → <span class="hl">看接口列</span>：用 10.8.0.233 这个网卡 <span class="hl">← 先选门</span>
+  → <span class="g">看网关列</span>：把包发给 10.8.0.234 <span class="g">← 再选门外的人</span></div>
+      </div>
+
+      <p>接口是<strong>网卡设备</strong>，IP 只是这个设备上的一个地址。设备上每个网卡有自己的 IP：</p>
+      <div class="three-col">
+        <div class="col"><div class="cl" style="color:var(--ink-muted);">Intel WiFi</div><div class="cd">10.90.23.254<br>上网用</div></div>
+        <div class="col"><div class="cl" style="color:var(--warning);">aTrust</div><div class="cd">10.8.0.233<br>连公司内网</div></div>
+        <div class="col"><div class="cl" style="color:var(--primary);">Clash TUN</div><div class="cd">198.18.0.1<br>代理用</div></div>
+      </div>
+
+      <div class="ins"><strong>先选门，再选门外的人。</strong> 网关 <code>10.8.0.234</code> 只有在 <code>10.8.0.233</code> 这个网卡上才能找到。如果选了别的网卡，根本够不着这个网关。</div>
+    </div>
+
+    <div class="card">
+      <div class="sec-name">TUN 的暗度陈仓</div>
+      <div class="dark-box">
+        <div class="dt">Clash TUN 的路由</div>
+        <div class="dr">1.0.0.0/8 → 网关 <span class="hl">198.18.0.2</span> → 接口 <span class="g">198.18.0.1</span></div>
+      </div>
+      <p><code>198.18.0.1</code> 是你这一端的虚拟网卡，<code>198.18.0.2</code> 是"对端"。操作系统以为包是要发给另一个设备的，但 TUN 驱动实际上把包复制到了内存，直接塞给了本机上的 Clash 进程。</p>
+      <div class="ins"><strong>网关和接口都在同一台电脑上。</strong> TCP/IP 协议栈设计上就必须有一个本端和对端地址，TUN 利用了这一点，假装有个远程网关，暗度陈仓把包转给了本地进程。</div>
+    </div>
+
+    <div class="card">
+      <div class="sec-name">On-link：不是废话</div>
+      <div class="dark-box">
+        <div class="dt">路由表中的 On-link 条目</div>
+        <div class="dr">10.90.23.0    255.255.255.0    On-link    10.90.23.254    286
+10.8.0.0      255.255.255.0    On-link    10.8.0.233      281
+198.18.0.0    255.255.0.0      On-link    198.18.0.1      256
+127.0.0.0     255.0.0.0        On-link    127.0.0.1       331</div>
+      </div>
+      <div class="cmp">
+        <div class="cmp-s good">
+          <div class="st">10.90.23.0/24</div>
+          <ul><li>WiFi 局域网内传文件、投屏</li><li>通信目标在同一个二层网络</li><li>不需要经路由器转发</li></ul>
+        </div>
+        <div class="cmp-s good">
+          <div class="st">198.18.0.0/16</div>
+          <ul><li>Clash 的 fake-IP 段</li><li>必须 On-link，否则系统会把包</li><li>发给默认网关，Clash 截不到</li></ul>
+        </div>
+      </div>
+      <p><strong>判断逻辑：</strong>目标 IP &amp; 子网掩码 == 本机 IP &amp; 子网掩码 → 同一个子网 → 不需要网关 → On-link</p>
+    </div>
+
+    <div class="card">
+      <div class="sec-name">Fake-IP：解决 DNS 污染</div>
+      <p>fake-IP 要解决的不是"包能不能被 Clash 抓到"，而是"Clash 怎么知道原始域名"：</p>
+      <div class="cmp">
+        <div class="cmp-s bad">
+          <div class="st">没有 fake-IP</div>
+          <ul><li>DNS → 真实 IP（可能已污染）</li><li>TUN 拦截 → 只有 IP</li><li>Clash：不知道对应什么域名</li><li>只能走 geoip，精度低易误判</li></ul>
+        </div>
+        <div class="cmp-s good">
+          <div class="st">有 fake-IP</div>
+          <ul><li>DNS → fake-IP（198.18.x.x）</li><li>TUN 拦截 → Clash 查映射表</li><li>Clash：198.18.1.1 = google.com</li><li>DOMAIN 规则完美生效</li></ul>
+        </div>
+      </div>
+      <div class="ins"><strong>替代方案不可行：</strong>从 TLS 的 SNI 提取域名需要 TCP 重组，复杂昂贵，且 TLS 1.3 的 ECH 加密后提取不到。fake-IP 是更优雅的解决方案。</div>
+    </div>
+  </div>
+
+  <!-- ════════════ Tab 5: 全流程 ════════════ -->
+  <div class="tab-panel" id="t5">
+    <div class="card">
+      <div class="sec-name">与 aTrust 和谐共存</div>
+      <p>除了 Clash，电脑里还跑着公司的 aTrust 安全隧道。三者在同一条路由表里各管各的：</p>
+
+      <div class="dark-box">
+        <div class="dt">aTrust 路由（精确 /32）</div>
+        <div class="dr">目标                 网关         接口         Metric
+172.16.1.20/31     10.8.0.234    10.8.0.233     25
+192.168.18.5/32    10.8.0.234    10.8.0.233     25
+<span class="g">... 仅限公司内网特定服务器</span></div>
+      </div>
+
+      <table class="mtbl">
+        <thead><tr><th>访问目标</th><th>匹配路由</th><th>效果</th></tr></thead>
+        <tbody>
+          <tr><td>192.168.18.5</td><td>aTrust /32 比什么都精确</td><td>走公司隧道</td></tr>
+          <tr><td>www.baidu.com</td><td>Clash /1 命中，规则判断国内</td><td>直连</td></tr>
+          <tr><td>www.google.com</td><td>Clash /1 命中，规则判断国外</td><td>走代理节点</td></tr>
+        </tbody>
+      </table>
+      <div class="ins"><strong>Metric 优先级排序，排在"最长前缀匹配"之后。</strong> 精确路由优先，范围路由兜底。</div>
+    </div>
+
+    <div class="card">
+      <div class="sec-name">从浏览器到 Google 的完整链路</div>
+      <p>所有概念理清之后，用 <code>curl</code> 访问 Google 时，脑子里终于能清晰地浮现出整条链路：</p>
+
+      <div class="flow-chain">
+        <div class="chain-step">
+          <div class="cs-num">1</div>
+          <div class="cs-label"><strong>浏览器</strong> 输入 URL，调 socket API → 连接请求(域名:443)</div>
+        </div>
+        <div class="chain-step">
+          <div class="cs-num">2</div>
+          <div class="cs-label"><strong>DNS</strong> Clash 返回 <span class="tag-accent">fake-IP</span> → 目标 IP = 198.18.1.1</div>
+        </div>
+        <div class="chain-step">
+          <div class="cs-num">3</div>
+          <div class="cs-label"><strong>TCP</strong> 三次握手 → TCP 数据包</div>
+        </div>
+        <div class="chain-step">
+          <div class="cs-num">4</div>
+          <div class="cs-label"><strong>路由表</strong> 匹配 <span class="tag-accent">198.18.0.0/16</span> On-link → 走 Clash TUN 网卡</div>
+        </div>
+        <div class="chain-step">
+          <div class="cs-num">5</div>
+          <div class="cs-label"><strong>TUN 驱动</strong> 拦截 IP 包转到 Clash 进程</div>
+        </div>
+        <div class="chain-step">
+          <div class="cs-num">6</div>
+          <div class="cs-label"><strong>Clash 规则</strong> 查 fake-IP 映射表 → 选择日本节点</div>
+        </div>
+        <div class="chain-step">
+          <div class="cs-num">7</div>
+          <div class="cs-label"><strong>封装</strong> 加密原始包 → 构造发往代理节点的新包</div>
+        </div>
+        <div class="chain-step">
+          <div class="cs-num">8</div>
+          <div class="cs-label"><strong>WiFi 网卡</strong> 发出无线信号到路由器</div>
+        </div>
+        <div class="chain-step">
+          <div class="cs-num">9</div>
+          <div class="cs-label"><strong>路由器</strong> NAT 转换 → 源 IP 换成公网 IP</div>
+        </div>
+        <div class="chain-step">
+          <div class="cs-num">10</div>
+          <div class="cs-label"><strong>代理节点</strong> 解密 payload → 取出原始包转发给 Google</div>
+        </div>
+        <div class="chain-step">
+          <div class="cs-num">11</div>
+          <div class="cs-label" style="border-left:2px solid var(--success);padding-left:8px;">
+            <strong>Google</strong> 收到 "日本用户" 的请求 → 响应原路返回 <span class="tag-green">✅</span></div>
+        </div>
+      </div>
+
+      <div class="ins">
+        <strong>包被穿了两次外套：</strong><br>
+        ① TUN 虚拟网卡把包从"发往物理网络"改成"交给本地 Clash 进程"<br>
+        ② Clash 把原始包加密，外面套一个"发往代理节点"的新包<br><br>
+        <strong>Google 从头到尾看到的源 IP 都是代理节点的 IP，</strong>既不知道你家宽带的公网 IP，也不知道你的局域网私有 IP。
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════ Tab 6: 总结 ════════════ -->
+  <div class="tab-panel" id="t6">
+    <div class="card">
+      <div class="sec-name">排查命令速查</div>
+      <div class="dark-box">
+        <div class="dt">网络排查工具箱</div>
+        <div class="dr"><span class="hl">route print -4</span>                   看路由表整体结构
+<span class="hl">Find-NetRoute</span> -RemoteIPAddress  看特定 IP 走哪个接口
+<span class="hl">curl.exe -s -w "%{remote_ip}"</span>   看实际连到了哪个 IP
+<span class="hl">ipconfig</span>                             看所有网卡和 IP 地址
+<span class="hl">tracert</span>                              看每一跳路径
+<span class="hl">nslookup</span>                             看 DNS 解析结果
+<span class="hl">Test-NetConnection</span>                  测试端口连通性</div>
+      </div>
+      <div class="ins"><strong>排查链路：</strong><code>ipconfig</code> 看网卡 → <code>route print</code> 看路由表 → <code>Find-NetRoute</code> 确认匹配 → <code>curl</code> 测试连通性。顺着链路一层层往下查。</div>
+    </div>
+
+    <div class="card">
+      <div class="sec-name">思维路径全景</div>
+      <p>从 npm 太慢开始，一路追到了路由表、代理协议与 OSI 模型的底层原理。</p>
+
+      <div class="path">
+        <div class="path-leg">
+          <div class="path-node" style="border-color:var(--primary);background:var(--surface-2);">
+            <div class="pn" style="color:var(--ink);">起点</div>
+            <div class="pname">npm 太慢</div>
+            <div class="pmath">装 Clash</div>
+          </div>
+          <div class="path-arrow"></div>
+        </div>
+        <div class="path-leg">
+          <div class="path-node">
+            <div class="pn">01</div>
+            <div class="pname">四种模式</div>
+            <div class="pmath">本地决策</div>
+          </div>
+          <div class="path-arrow"></div>
+        </div>
+        <div class="path-leg">
+          <div class="path-node">
+            <div class="pn">02</div>
+            <div class="pname">系统代理</div>
+            <div class="pmath">应用层转发</div>
+          </div>
+          <div class="path-arrow"></div>
+        </div>
+        <div class="path-leg">
+          <div class="path-node">
+            <div class="pn">03</div>
+            <div class="pname">TUN 模式</div>
+            <div class="pmath">网络层拦截</div>
+          </div>
+          <div class="path-arrow"></div>
+        </div>
+        <div class="path-leg">
+          <div class="path-node">
+            <div class="pn">04</div>
+            <div class="pname">路由表</div>
+            <div class="pmath">奇怪掩码</div>
+          </div>
+          <div class="path-arrow"></div>
+        </div>
+        <div class="path-leg">
+          <div class="path-node">
+            <div class="pn">05</div>
+            <div class="pname">接口 vs 网关</div>
+            <div class="pmath">先选门</div>
+          </div>
+          <div class="path-arrow"></div>
+        </div>
+        <div class="path-leg">
+          <div class="path-node">
+            <div class="pn">06</div>
+            <div class="pname">On-link</div>
+            <div class="pmath">同子网直连</div>
+          </div>
+          <div class="path-arrow"></div>
+        </div>
+        <div class="path-leg">
+          <div class="path-node">
+            <div class="pn">07</div>
+            <div class="pname">Fake-IP</div>
+            <div class="pmath">DNS 污染</div>
+          </div>
+          <div class="path-arrow"></div>
+        </div>
+        <div class="path-leg">
+          <div class="path-node">
+            <div class="pn">08</div>
+            <div class="pname">完整链路</div>
+            <div class="pmath">两次外套</div>
+          </div>
+          <div class="path-arrow"></div>
+        </div>
+        <div class="path-leg">
+          <div class="path-node" style="border-color:var(--primary);background:var(--surface-2);">
+            <div class="pn" style="color:var(--ink);">终点</div>
+            <div class="pname" style="font-weight:600;">排查能力</div>
+            <div class="pmath">层层下查</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="sec-name">关键洞察</div>
+      <div class="ins" style="margin-bottom:8px;"><strong>① 四种模式全部本地决策</strong><br>Clash 客户端本地维护规则集，与 VPN 服务器无关</div>
+      <div class="ins" style="margin-bottom:8px;"><strong>② TUN ≠ 全局模式</strong><br>TUN 解决"哪些流量进来"，策略判断仍由 Clash 规则引擎执行</div>
+      <div class="ins" style="margin-bottom:8px;"><strong>③ 先选门，再选门外的人</strong><br>接口=本端设备，网关=链路对端，网关必须在接口的子网内</div>
+      <div class="ins" style="margin-bottom:8px;"><strong>④ Fake-IP 解决 DNS 污染</strong><br>不是多此一举，而是让 Clash 能通过域名规则精准分流</div>
+      <div class="ins"><strong>⑤ 排查要有层次感</strong><br>网卡 → 路由表 → 匹配结果 → 连通性测试，从下往上逐层排查</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══ JS ═══ -->
+<script>
+// 剥离代码块的多余 HTML 缩进
+(function() {
+  document.querySelectorAll('.dark-box .dr').forEach(function(el) {
+    var html = el.innerHTML;
+    var lines = html.split('\n');
+    if (lines.length <= 1) return;
+    var base = null;
+    for (var i = 0; i < lines.length; i++) {
+      var t = lines[i].trim();
+      if (t.length > 0) {
+        base = lines[i].length - t.length;
+        break;
+      }
+    }
+    if (!base || base === 0) return;
+    el.innerHTML = lines.map(function(l) { return l.slice(base); }).join('\n').trim();
+  });
+})();
+
+// Tab 切换
+(function() {
+  var tabs = document.querySelectorAll('.tab-btn');
+  var panels = document.querySelectorAll('.tab-panel');
+  tabs.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var t = this.dataset.t;
+      tabs.forEach(function(b) { b.classList.toggle('active', b === btn); });
+      panels.forEach(function(p) { p.classList.toggle('active', p.id === t); });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
+})();
+</script>
+</body>
+</html>
