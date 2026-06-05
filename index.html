@@ -1,290 +1,408 @@
 <!DOCTYPE html>
 <html lang="zh">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>My Notes</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-  /* ── Reset ── */
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
-  /* ── Noise Texture ── */
-  @svg-noise: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
-
-  body {
-    font-family: 'DM Sans', Inter, -apple-system, 'PingFang SC', 'Segoe UI', sans-serif;
-    background: #faf9f5;
-    color: #3d3d3a;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  /* ── Top Accent Line ── */
-  body::after {
-    content: '';
-    position: fixed;
-    top: 0; left: 0; right: 0;
-    height: 2px;
-    background: #cc785c;
-    z-index: 999;
-  }
-
-  .page {
-    position: relative;
-    z-index: 1;
-    flex: 1;
-    max-width: 1100px;
-    width: 100%;
-    margin: 0 auto;
-    padding: 64px 24px 0;
-  }
-
-  /* ── Animations ── */
-  @keyframes fadeSlideUp {
-    from { opacity: 0; transform: translateY(16px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to   { opacity: 1; }
-  }
-
-  /* ── Header ── */
-  header {
-    text-align: center;
-    margin-bottom: 40px;
-    animation: fadeSlideUp 0.6s ease-out both;
-  }
-  header h1 {
-    font-family: 'Cormorant Garamond', Garamond, 'Times New Roman', serif;
-    font-size: 36px;
-    font-weight: 700;
-    letter-spacing: -1.2px;
-    line-height: 1.08;
-    color: #141413;
-    margin-bottom: 18px;
-  }
-  header h1 .mark {
-    display: inline-block;
-    position: relative;
-    top: -3px;
-    margin-right: 2px;
-    width: 20px;
-    height: 20px;
-  }
-  header h1 .mark svg { width: 100%; height: 100%; }
-  header .sub {
-    font-size: 15px;
-    font-weight: 400;
-    color: #8e8b82;
-    line-height: 1.55;
-    letter-spacing: 0.2px;
-  }
-  /* Decorative rule under subtitle */
-  header .rule {
-    width: 40px;
-    height: 2px;
-    background: #cc785c;
-    margin: 20px auto 0;
-    border-radius: 1px;
-  }
-
-  /* ── Divider ── */
-  .divider {
-    width: 120px;
-    height: 1px;
-    background: #e6dfd8;
-    margin-bottom: 36px;
-  }
-
-  /* ── List ── */
-  .list { display: flex; flex-direction: column; gap: 14px; }
-
-  /* ── Card Row ── */
-  a.row {
-    position: relative;
-    display: grid;
-    grid-template-columns: 420px 1fr auto;
-    background: #ffffff;
-    border: 1px solid #e6dfd8;
-    border-radius: 14px;
-    text-decoration: none;
-    color: #141413;
-    transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
-    overflow: hidden;
-    /* Staggered entrance */
-    opacity: 0;
-    animation: fadeSlideUp 0.5s ease-out both;
-  }
-  a.row:nth-child(1) { animation-delay: 0.12s; }
-  a.row:nth-child(2) { animation-delay: 0.18s; }
-  a.row:nth-child(3) { animation-delay: 0.24s; }
-  a.row:nth-child(4) { animation-delay: 0.30s; }
-  a.row:nth-child(5) { animation-delay: 0.36s; }
-  a.row:nth-child(6) { animation-delay: 0.42s; }
-  a.row:nth-child(7) { animation-delay: 0.48s; }
-
-  /* Hover: full coral border */
-  a.row:hover {
-    border-color: #cc785c;
-    transform: translateY(-3px);
-    box-shadow: 0 10px 32px rgba(204,120,92,0.16), 0 4px 8px rgba(20,20,19,0.08);
-  }
-
-  /* ── Thumbnail ── */
-  .thumb {
-    aspect-ratio: 16 / 10;
-    background-color: #efe9de;
-    background-image: radial-gradient(ellipse at 30% 30%, #f5f0e8 0%, #efe9de 100%);
-    background-size: contain;
-    background-position: center;
-    background-repeat: no-repeat;
-    border-right: 1px solid #e6dfd8;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-  }
-  .thumb-icon { font-size: 30px; }
-
-  /* ── Card Body ── */
-  .body {
-    padding: 30px 36px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 12px;
-  }
-  .title {
-    font-family: 'Cormorant Garamond', Garamond, 'Times New Roman', serif;
-    font-size: 26px;
-    font-weight: 600;
-    letter-spacing: -0.3px;
-    line-height: 1.25;
-    color: #141413;
-    transition: color 0.2s ease;
-  }
-  a.row:hover .title { color: #cc785c; }
-
-  .desc {
-    display: inline-block;
-    align-self: flex-start;
-    max-width: 100%;
-    background: rgba(239,233,222,0.65);
-    color: #6c6a64;
-    font-family: 'DM Sans', Inter, sans-serif;
-    font-size: 12.5px;
-    font-weight: 500;
-    line-height: 1.45;
-    padding: 4px 11px;
-    border-radius: 999px;
-    letter-spacing: 0.2px;
-    backdrop-filter: blur(4px);
-  }
-
-  /* ── Arrow ── */
-  .arrow {
-    display: flex;
-    align-items: center;
-    padding: 0 26px;
-    font-size: 18px;
-    color: #c4c0b8;
-    transition: transform 0.25s ease, color 0.25s ease;
-  }
-  a.row:hover .arrow {
-    color: #cc785c;
-    transform: translateX(5px);
-  }
-
-  /* ── Date Badge ── */
-  .date {
-    position: absolute;
-    left: 10px;
-    bottom: 10px;
-    background: rgba(255,255,255,0.90);
-    -webkit-backdrop-filter: saturate(140%) blur(8px);
-    backdrop-filter: saturate(140%) blur(8px);
-    border-radius: 999px;
-    padding: 3px 9px;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
-    box-shadow: 0 1px 4px rgba(20,20,19,0.06);
-    pointer-events: none;
-    z-index: 1;
-  }
-  .date .label {
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 10.5px;
-    font-weight: 400;
-    color: #8e8b82;
-    letter-spacing: -0.2px;
-  }
-
-  /* ── Footer ── */
-  .footer-spacer { height: 80px; }
-  footer {
-    background: #181715;
-    color: #a09d96;
-    text-align: center;
-    padding: 25px 18px;
-    font-size: 12.5px;
-    line-height: 1.6;
-    position: relative;
-    margin-top: 0;
-  }
-  footer .mark {
-    display: inline-block;
-    width: 14px;
-    height: 14px;
-    margin-bottom: 12px;
-    opacity: 0.4;
-  }
-  footer .mark svg { width: 100%; height: 100%; }
-  footer .bracket { opacity: 0.35; }
-  footer a {
-    color: #cc785c;
-    text-decoration: none;
-    transition: opacity 0.15s;
-  }
-  footer a:hover { opacity: 0.75; }
-
-  /* ── Responsive ── */
-  @media (max-width: 760px) {
-    .page { padding: 32px 16px 0; }
-    header h1 { font-size: 36px; }
-    header .sub { font-size: 14px; }
-    header { margin-bottom: 56px; }
-    a.row { grid-template-columns: 1fr; }
-    .thumb {
-      border-right: 0;
-      border-bottom: 1px solid #e6dfd8;
-      aspect-ratio: 16 / 7;
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Notes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+  <style>
+    /* ── Reset ── */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
     }
-    .arrow { display: none; }
-    .date { left: 10px; bottom: auto; top: 10px; }
-    .body { padding: 18px 22px; }
-    .title { font-size: 22px; }
-    .divider { width: 80px; }
-    .footer-spacer { height: 48px; }
-  }
-</style>
+
+    /* ── Noise Texture ── */
+    @svg-noise: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+
+    body {
+      font-family: 'DM Sans', Inter, -apple-system, 'PingFang SC', 'Segoe UI', sans-serif;
+      background: #faf9f5;
+      color: #3d3d3a;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Top Accent Line ── */
+    body::after {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: #cc785c;
+      z-index: 999;
+    }
+
+    .page {
+      position: relative;
+      z-index: 1;
+      flex: 1;
+      max-width: 1100px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 64px 24px 0;
+    }
+
+    /* ── Animations ── */
+    @keyframes fadeSlideUp {
+      from {
+        opacity: 0;
+        transform: translateY(16px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+
+    /* ── Header ── */
+    header {
+      text-align: center;
+      animation: fadeSlideUp 0.6s ease-out both;
+    }
+
+    header h1 {
+      font-family: 'Cormorant Garamond', Garamond, 'Times New Roman', serif;
+      font-size: 36px;
+      font-weight: 700;
+      letter-spacing: -1.2px;
+      line-height: 1.08;
+      color: #141413;
+      margin-bottom: 18px;
+    }
+
+    header h1 .mark {
+      display: inline-block;
+      position: relative;
+      top: -3px;
+      margin-right: 2px;
+      width: 20px;
+      height: 20px;
+    }
+
+    header h1 .mark svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    header .sub {
+      font-size: 15px;
+      font-weight: 400;
+      color: #8e8b82;
+      line-height: 1.55;
+      letter-spacing: 0.2px;
+    }
+
+    /* Decorative rule under subtitle */
+    header .rule {
+      width: 40px;
+      height: 2px;
+      background: #cc785c;
+      margin: 20px auto 0;
+      border-radius: 1px;
+    }
+
+    /* ── Divider ── */
+    .divider {
+      width: 120px;
+      height: 1px;
+      background: #e6dfd8;
+      margin-bottom: 36px;
+    }
+
+    /* ── List ── */
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* ── Card Row ── */
+    a.row {
+      position: relative;
+      display: grid;
+      grid-template-columns: 420px 1fr auto;
+      background: #ffffff;
+      border: 1px solid #e6dfd8;
+      border-radius: 14px;
+      text-decoration: none;
+      color: #141413;
+      transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+      overflow: hidden;
+      /* Staggered entrance */
+      opacity: 0;
+      animation: fadeSlideUp 0.5s ease-out both;
+    }
+
+    a.row:nth-child(1) {
+      animation-delay: 0.12s;
+    }
+
+    a.row:nth-child(2) {
+      animation-delay: 0.18s;
+    }
+
+    a.row:nth-child(3) {
+      animation-delay: 0.24s;
+    }
+
+    a.row:nth-child(4) {
+      animation-delay: 0.30s;
+    }
+
+    a.row:nth-child(5) {
+      animation-delay: 0.36s;
+    }
+
+    a.row:nth-child(6) {
+      animation-delay: 0.42s;
+    }
+
+    a.row:nth-child(7) {
+      animation-delay: 0.48s;
+    }
+
+    a.row:nth-child(8) {
+      animation-delay: 0.54s;
+    }
+
+    /* Hover: full coral border */
+    a.row:hover {
+      border-color: #cc785c;
+      transform: translateY(-3px);
+      box-shadow: 0 10px 32px rgba(204, 120, 92, 0.16), 0 4px 8px rgba(20, 20, 19, 0.08);
+    }
+
+    /* ── Thumbnail ── */
+    .thumb {
+      aspect-ratio: 16 / 10;
+      background-color: #efe9de;
+      background-image: radial-gradient(ellipse at 30% 30%, #f5f0e8 0%, #efe9de 100%);
+      background-size: contain;
+      background-position: center;
+      background-repeat: no-repeat;
+      border-right: 1px solid #e6dfd8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .thumb-icon {
+      font-size: 30px;
+    }
+
+    /* ── Card Body ── */
+    .body {
+      padding: 30px 36px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .title {
+      font-family: 'Cormorant Garamond', Garamond, 'Times New Roman', serif;
+      font-size: 26px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+      line-height: 1.25;
+      color: #141413;
+      transition: color 0.2s ease;
+    }
+
+    a.row:hover .title {
+      color: #cc785c;
+    }
+
+    .desc {
+      display: inline-block;
+      align-self: flex-start;
+      max-width: 100%;
+      background: rgba(239, 233, 222, 0.65);
+      color: #6c6a64;
+      font-family: 'DM Sans', Inter, sans-serif;
+      font-size: 12.5px;
+      font-weight: 500;
+      line-height: 1.45;
+      padding: 4px 11px;
+      border-radius: 999px;
+      letter-spacing: 0.2px;
+      backdrop-filter: blur(4px);
+    }
+
+    /* ── Arrow ── */
+    .arrow {
+      display: flex;
+      align-items: center;
+      padding: 0 26px;
+      font-size: 18px;
+      color: #c4c0b8;
+      transition: transform 0.25s ease, color 0.25s ease;
+    }
+
+    a.row:hover .arrow {
+      color: #cc785c;
+      transform: translateX(5px);
+    }
+
+    /* ── Date Badge ── */
+    .date {
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      background: rgba(255, 255, 255, 0.90);
+      -webkit-backdrop-filter: saturate(140%) blur(8px);
+      backdrop-filter: saturate(140%) blur(8px);
+      border-radius: 999px;
+      padding: 3px 9px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+      box-shadow: 0 1px 4px rgba(20, 20, 19, 0.06);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .date .label {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 10.5px;
+      font-weight: 400;
+      color: #8e8b82;
+      letter-spacing: -0.2px;
+    }
+
+    /* ── Footer ── */
+    .footer-spacer {
+      height: 80px;
+    }
+
+    footer {
+      background: #181715;
+      color: #a09d96;
+      text-align: center;
+      padding: 10px 18px;
+      font-size: 12.5px;
+      line-height: 1.6;
+      position: relative;
+      margin-top: 40px;
+    }
+
+    footer .mark {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      margin-bottom: 12px;
+      opacity: 0.4;
+    }
+
+    footer .mark svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    footer .bracket {
+      opacity: 0.35;
+    }
+
+    footer a {
+      color: #cc785c;
+      text-decoration: none;
+      transition: opacity 0.15s;
+    }
+
+    footer a:hover {
+      opacity: 0.75;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 760px) {
+      .page {
+        padding: 32px 16px 0;
+      }
+
+      header h1 {
+        font-size: 36px;
+      }
+
+      header .sub {
+        font-size: 14px;
+      }
+
+      header {
+        margin-bottom: 56px;
+      }
+
+      a.row {
+        grid-template-columns: 1fr;
+      }
+
+      .thumb {
+        border-right: 0;
+        border-bottom: 1px solid #e6dfd8;
+        aspect-ratio: 16 / 7;
+      }
+
+      .arrow {
+        display: none;
+      }
+
+      .date {
+        left: 10px;
+        bottom: auto;
+        top: 10px;
+      }
+
+      .body {
+        padding: 18px 22px;
+      }
+
+      .title {
+        font-size: 22px;
+      }
+
+      .divider {
+        width: 80px;
+      }
+
+      .footer-spacer {
+        height: 48px;
+      }
+    }
+  </style>
 </head>
+
 <body>
   <div class="page">
     <header>
@@ -298,6 +416,16 @@
     <div class="divider"></div>
 
     <div class="list">
+      <a class="row" href="notes/anthropic-prompt-caching.html">
+        <div class="thumb" style="background-image:url('images/anthropic-prompt-caching.jpg')">
+          <div class="date"><span class="label">2026-06-05</span></div>
+        </div>
+        <div class="body">
+          <div class="title">拆解 Anthropic 提示词缓存</div>
+          <div class="desc">cache_control · 前缀缓存 · 20-block 回溯 · 级联失效</div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
       <a class="row" href="notes/clash-network-deep-dive.html">
         <div class="thumb" style="background-image:url('images/clash-network-deep-dive.jpg')">
           <div class="date"><span class="label">2026-06-02</span></div>
@@ -332,9 +460,16 @@
   </div>
 
   <footer>
-    <div class="mark"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L12 22" stroke="#a09d96" stroke-width="2.5" stroke-linecap="round"/><path d="M2 12L22 12" stroke="#a09d96" stroke-width="2.5" stroke-linecap="round"/><path d="M4.93 4.93L19.07 19.07" stroke="#a09d96" stroke-width="2.5" stroke-linecap="round"/><path d="M19.07 4.93L4.93 19.07" stroke="#a09d96" stroke-width="2.5" stroke-linecap="round"/></svg></div>
+    <div class="mark"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2L12 22" stroke="#a09d96" stroke-width="2.5" stroke-linecap="round" />
+        <path d="M2 12L22 12" stroke="#a09d96" stroke-width="2.5" stroke-linecap="round" />
+        <path d="M4.93 4.93L19.07 19.07" stroke="#a09d96" stroke-width="2.5" stroke-linecap="round" />
+        <path d="M19.07 4.93L4.93 19.07" stroke="#a09d96" stroke-width="2.5" stroke-linecap="round" />
+      </svg></div>
     <br>
-    使用 <a href="https://pages.github.com">GitHub Pages</a> 托管 <span class="bracket">·</span> 内容存储在 <a href="https://github.com/hjl-2005/my-notes">GitHub</a> 仓库
+    使用 <a href="https://pages.github.com">GitHub Pages</a> 托管 <span class="bracket">·</span> 内容存储在 <a
+      href="https://github.com/hjl-2005/my-notes">GitHub</a> 仓库
   </footer>
 </body>
+
 </html>

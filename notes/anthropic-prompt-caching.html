@@ -1,0 +1,1894 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>拆解 Anthropic 提示词缓存 — 从请求字段到 20-block 回溯窗口</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+  <style>
+    /* ── Claude Design Tokens ── */
+    :root {
+      --primary: #cc785c;
+      --primary-active: #a9583e;
+      --ink: #141413;
+      --body: #3d3d3a;
+      --body-strong: #252523;
+      --muted: #6c6a64;
+      --muted-soft: #8e8b82;
+      --hairline: #e6dfd8;
+      --hairline-soft: #ebe6df;
+      --canvas: #faf9f5;
+      --surface-soft: #f5f0e8;
+      --surface-card: #efe9de;
+      --surface-dark: #181715;
+      --surface-dark-soft: #1f1e1b;
+      --surface-dark-elevated: #252320;
+      --on-primary: #ffffff;
+      --on-dark: #faf9f5;
+      --on-dark-soft: #a09d96;
+      --accent-teal: #5db8a6;
+      --accent-amber: #e8a55a;
+      --success: #5db872;
+      --error: #c64545;
+      --font-display: 'Cormorant Garamond', Garamond, 'Times New Roman', serif;
+      --font-body: 'DM Sans', Inter, -apple-system, 'PingFang SC', 'Segoe UI', sans-serif;
+      --font-code: 'JetBrains Mono', ui-monospace, monospace;
+      /* 语义色 */
+      --color-bp: #cc785c;
+      --color-tools: #e8a55a;
+      --color-system: #cc785c;
+      --color-msgs: #5db8a6;
+      --color-hit: #5db872;
+      --color-miss: #c64545;
+    }
+
+    /* ── Reset ── */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--canvas);
+      color: var(--body);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Noise Texture ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Top Accent Line ── */
+    body::after {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--primary);
+      z-index: 999;
+    }
+
+    /* ── Topbar ── */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(250, 249, 245, 0.92);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 24px;
+      border-bottom: 1px solid var(--hairline);
+      font-size: 13px;
+    }
+
+    .topbar .back {
+      color: var(--muted);
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    .topbar .back:hover {
+      color: var(--primary);
+    }
+
+    .topbar .sep {
+      width: 1px;
+      height: 14px;
+      background: var(--hairline);
+      border-radius: 1px;
+    }
+
+    .topbar .tag {
+      color: var(--muted-soft);
+      font-weight: 500;
+      font-size: 12px;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      position: relative;
+      z-index: 1;
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 64px 24px 28px;
+      text-align: center;
+    }
+
+    .hero h1 {
+      font-family: var(--font-display);
+      font-size: 42px;
+      font-weight: 600;
+      letter-spacing: -1px;
+      line-height: 1.15;
+      color: var(--ink);
+      margin-bottom: 14px;
+    }
+
+    .hero .sub {
+      font-size: 16px;
+      font-weight: 400;
+      color: var(--muted);
+      line-height: 1.55;
+      text-align: left;
+    }
+
+    .hero .rule {
+      width: 44px;
+      height: 2px;
+      background: var(--primary);
+      margin-top: 18px;
+      border-radius: 1px;
+    }
+
+    /* ── Animations ── */
+    @keyframes fadeSlideUp {
+      from {
+        opacity: 0;
+        transform: translateY(16px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        box-shadow: 0 0 0 0 rgba(204, 120, 92, 0.4);
+      }
+
+      50% {
+        box-shadow: 0 0 0 6px rgba(204, 120, 92, 0);
+      }
+    }
+
+    /* ── Tab Navigation ── */
+    .tabs-wrap {
+      position: sticky;
+      top: 41px;
+      z-index: 99;
+      background: rgba(250, 249, 245, 0.92);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--hairline);
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 12px 24px;
+      display: flex;
+      gap: 0;
+      overflow-x: auto;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .tab-btn {
+      flex-shrink: 0;
+      padding: 7px 14px;
+      border: 1px solid var(--hairline);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all .2s;
+      white-space: nowrap;
+      font-family: var(--font-body);
+    }
+
+    .tab-btn:hover {
+      border-color: var(--primary);
+      color: var(--ink);
+    }
+
+    .tab-btn.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+
+    .tab-arrow {
+      flex-shrink: 0;
+      font-size: 14px;
+      color: #c4c0b8;
+      font-weight: 600;
+      padding: 0 4px;
+      user-select: none;
+    }
+
+    /* ── Content Area ── */
+    .content {
+      position: relative;
+      z-index: 1;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px 24px 80px;
+      flex: 1;
+    }
+
+    .tab-panel {
+      display: none;
+      animation: fadeSlideUp 0.35s ease-out both;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: #fff;
+      border: 1px solid var(--hairline);
+      border-radius: 16px;
+      padding: 32px 28px;
+      margin-bottom: 18px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, .03);
+    }
+
+    .sec-name {
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--ink);
+      margin-bottom: 18px;
+      padding-left: 14px;
+      border-left: 3px solid var(--primary);
+    }
+
+    /* ── Doc Link ── */
+    .doc-link {
+      display: inline-block;
+      font-family: var(--font-code);
+      font-size: 11px;
+      color: var(--primary);
+      text-decoration: none;
+      border-bottom: 1px dotted var(--primary);
+      margin-left: 4px;
+      transition: opacity 0.15s;
+    }
+
+    .doc-link:hover {
+      opacity: 0.7;
+    }
+
+    .doc-ref {
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid var(--hairline-soft);
+      font-size: 11px;
+      color: var(--muted-soft);
+    }
+
+    .doc-ref a {
+      color: var(--primary);
+      text-decoration: none;
+      font-family: var(--font-code);
+      font-size: 10px;
+    }
+
+    .doc-ref a:hover {
+      text-decoration: underline;
+    }
+
+    /* ── Dark Box ── */
+    .dark-box {
+      background: var(--surface-dark);
+      border-radius: 12px;
+      padding: 18px 22px;
+      color: var(--on-dark);
+      margin-bottom: 14px;
+      overflow-x: auto;
+    }
+
+    .dark-box .dt {
+      font-size: 12px;
+      color: var(--primary);
+      font-weight: 600;
+      margin-bottom: 10px;
+      letter-spacing: 0.5px;
+    }
+
+    .dark-box .dr {
+      font-family: var(--font-code);
+      font-size: 12px;
+      line-height: 1.7;
+      color: var(--on-dark-soft);
+      white-space: pre;
+      tab-size: 2;
+      -moz-tab-size: 2;
+    }
+
+    /* ── JSON Syntax Highlighting ── */
+    .dark-box .dr .j-bp {
+      background: rgba(204, 120, 92, 0.25);
+      padding: 1px 4px;
+      border-radius: 3px;
+      color: #f5b8a3;
+    }
+
+    .dark-box .dr .j-cmt {
+      color: #6c6a64;
+      font-style: italic;
+    }
+
+    /* ── Insight Box ── */
+    .ins {
+      background: var(--surface-soft);
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: var(--muted);
+      text-align: center;
+      line-height: 1.55;
+    }
+
+    .ins strong {
+      color: var(--ink);
+    }
+
+    /* ── Badge ── */
+    .badge {
+      display: inline-block;
+      background: var(--primary);
+      color: #fff;
+      border-radius: 999px;
+      padding: 5px 14px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .badge.g {
+      background: var(--success);
+    }
+
+    .badge.a {
+      background: var(--accent-amber);
+    }
+
+    /* ── Two / Three Column ── */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .three-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+    }
+
+    /* ── Comparison Cards ── */
+    .cmp {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin: 14px 0;
+    }
+
+    .cmp-s {
+      border-radius: 14px;
+      padding: 22px 18px;
+      text-align: center;
+    }
+
+    .cmp-s.bad {
+      background: #fef2f2;
+      border: 2px solid #fecaca;
+    }
+
+    .cmp-s.good {
+      background: #f0fdf4;
+      border: 2px solid #bbf7d0;
+    }
+
+    .cmp-s .st {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .cmp-s.bad .st {
+      color: #c64545;
+    }
+
+    .cmp-s.good .st {
+      color: #059669;
+    }
+
+    .cmp-s .cd {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .cmp-s .cv {
+      font-family: var(--font-code);
+      font-size: 22px;
+      font-weight: 700;
+      margin: 8px 0 4px;
+    }
+
+    .cmp-s.bad .cv {
+      color: #c64545;
+    }
+
+    .cmp-s.good .cv {
+      color: #059669;
+    }
+
+    /* ── Flow Row ── */
+    .flow-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin: 18px 0;
+      flex-wrap: wrap;
+    }
+
+    .flow-block {
+      padding: 14px 28px;
+      border-radius: 12px;
+      text-align: center;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .flow-block.tools {
+      background: #fef3c7;
+      color: #92400e;
+      border: 2px solid #fcd34d;
+    }
+
+    .flow-block.system {
+      background: #fef2f2;
+      color: #a9583e;
+      border: 2px solid #fecaca;
+    }
+
+    .flow-block.msgs {
+      background: #ecfdf5;
+      color: #065f46;
+      border: 2px solid #a7f3d0;
+    }
+
+    .flow-arr {
+      font-size: 20px;
+      color: var(--muted-soft);
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    /* ── Prompt Bar（统一前缀条）── */
+    .prompt-bar-wrap {
+      margin: 20px 0 28px;
+    }
+
+    .prompt-bar-wrap .pb-label {
+      font-size: 12px;
+      color: var(--muted-soft);
+      font-family: var(--font-code);
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    .prompt-bar {
+      display: flex;
+      height: 56px;
+      border-radius: 10px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .prompt-bar .pb-seg {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .prompt-bar .pb-seg.tools {
+      flex: 1;
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .prompt-bar .pb-seg.system {
+      flex: 1.8;
+      background: #fef2f2;
+      color: #a9583e;
+      padding: 0;
+    }
+
+    .prompt-bar .pb-seg.msgs {
+      flex: 2.5;
+      background: #ecfdf5;
+      color: #065f46;
+    }
+
+    .prompt-bar .pb-seg .pb-sub {
+      font-size: 10px;
+      font-weight: 400;
+      opacity: 0.65;
+      margin-top: 2px;
+    }
+
+    /* system 内部子分段 */
+    .prompt-bar .pb-seg.system .pb-inner {
+      display: flex;
+      width: 100%;
+      height: 100%;
+    }
+
+    .prompt-bar .pb-seg.system .pb-inner .pbi {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      font-weight: 600;
+      font-size: 12px;
+    }
+
+    .prompt-bar .pb-seg.system .pb-inner .pbi.sys0 {
+      flex: 1;
+      background: #fef7f4;
+      border-right: 1px dashed #f5987d;
+    }
+
+    .prompt-bar .pb-seg.system .pb-inner .pbi.sys1 {
+      flex: 1.2;
+      background: #fdf2ee;
+    }
+
+    /* 断点标记行 */
+    .pb-bp-row {
+      display: flex;
+      height: 32px;
+      align-items: flex-start;
+      position: relative;
+      margin-top: 5px;
+    }
+
+    .pb-bp-row .pb-bp {
+      position: absolute;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .pb-bp-row .pb-bp .pb-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--primary);
+      margin-bottom: 4px;
+    }
+
+    .pb-bp-row .pb-bp .pb-bp-label {
+      font-family: var(--font-code);
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--primary);
+      white-space: nowrap;
+    }
+
+    .pb-bp-row .pb-bp .pb-bp-desc {
+      font-size: 10px;
+      color: var(--muted-soft);
+      white-space: nowrap;
+    }
+
+    /* ── Prefix Stack ── */
+    .prefix-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin: 18px 0;
+      font-family: var(--font-code);
+      font-size: 12px;
+    }
+
+    .prefix-stack .ps-row {
+      display: flex;
+      align-items: stretch;
+      min-height: 38px;
+    }
+
+    .prefix-stack .ps-bar {
+      width: 4px;
+      flex-shrink: 0;
+      border-radius: 2px 0 0 2px;
+    }
+
+    .prefix-stack .ps-body {
+      flex: 1;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 0 8px 8px 0;
+      margin-bottom: 1px;
+    }
+
+    .prefix-stack .ps-body.tools {
+      background: #fef9ef;
+      border: 1px solid #fde68a;
+    }
+
+    .prefix-stack .ps-body.sys0 {
+      background: #fef7f4;
+      border: 1px solid #fcd4cc;
+    }
+
+    .prefix-stack .ps-body.sys1 {
+      background: #fdf2ee;
+      border: 1px solid #f8c4b8;
+    }
+
+    .prefix-stack .ps-body.msgs {
+      background: #f2faf8;
+      border: 1px solid #b7e4d7;
+    }
+
+    .prefix-stack .ps-body.new {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+    }
+
+    .prefix-stack .ps-bar.tools {
+      background: #fcd34d;
+    }
+
+    .prefix-stack .ps-bar.sys0 {
+      background: #f5987d;
+    }
+
+    .prefix-stack .ps-bar.sys1 {
+      background: #e87a5c;
+    }
+
+    .prefix-stack .ps-bar.msgs {
+      background: #5db8a6;
+    }
+
+    .prefix-stack .ps-bar.new {
+      background: #fca5a5;
+    }
+
+    .ps-bp {
+      display: inline-block;
+      background: var(--primary);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+      white-space: nowrap;
+      animation: pulse 2s infinite;
+    }
+
+    /* ── Role Cards ── */
+    .role-card {
+      border-radius: 14px;
+      padding: 20px 14px 16px;
+      text-align: center;
+      border: 2px solid;
+    }
+
+    .role-card.bp {
+      background: rgba(204, 120, 92, .06);
+      border-color: var(--color-bp);
+    }
+
+    .role-card.tools-c {
+      background: rgba(232, 165, 90, .08);
+      border-color: var(--color-tools);
+    }
+
+    .role-card.msgs-c {
+      background: rgba(93, 184, 166, .08);
+      border-color: var(--color-msgs);
+    }
+
+    .role-card .rl {
+      font-family: var(--font-code);
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .role-card.bp .rl {
+      color: var(--color-bp);
+    }
+
+    .role-card.tools-c .rl {
+      color: var(--color-tools);
+    }
+
+    .role-card.msgs-c .rl {
+      color: var(--color-msgs);
+    }
+
+    .role-card .rd {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    /* ── Walkback Visualization ── */
+    .walkback-wrap {
+      margin: 18px 0;
+      overflow-x: auto;
+    }
+
+    .walkback {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      min-width: max-content;
+      padding: 8px 0;
+    }
+
+    .walkback .wb {
+      width: 44px;
+      height: 30px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-code);
+      font-size: 10px;
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+
+    .walkback .wb.cached {
+      background: #d1fae5;
+      color: #065f46;
+      border: 2px solid #6ee7b7;
+    }
+
+    .walkback .wb.recalc {
+      background: #fef2f2;
+      color: #991b1b;
+      color: #991b1b;
+      border: 2px solid #fecaca;
+    }
+
+    .walkback .wb.current {
+      background: var(--primary);
+      color: #fff;
+      border: 2px solid var(--primary);
+      font-weight: 700;
+    }
+
+    .walkback .wb.label {
+      width: auto;
+      background: transparent;
+      border: none;
+      color: var(--muted-soft);
+      font-size: 11px;
+    }
+
+    .walkback .wb.gap {
+      width: 12px;
+      background: transparent;
+      border: none;
+    }
+
+    /* ── Step List ── */
+    .step-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin: 14px 0;
+    }
+
+    .step-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 14px 16px;
+      background: #fff;
+      border: 1px solid var(--hairline);
+      border-radius: 12px;
+      transition: border-color 0.2s;
+    }
+
+    .step-item:hover {
+      border-color: var(--primary);
+    }
+
+    .step-num {
+      flex-shrink: 0;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--surface-card);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .step-body {
+      flex: 1;
+      font-size: 13px;
+      color: var(--body);
+      line-height: 1.55;
+      padding-top: 4px;
+    }
+
+    .step-body strong {
+      color: var(--ink);
+    }
+
+    /* ── Table ── */
+    .mtbl {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin: 14px 0;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid var(--hairline);
+    }
+
+    .mtbl thead th {
+      background: var(--surface-card);
+      color: var(--muted);
+      font-weight: 600;
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 12px;
+      letter-spacing: 0.3px;
+    }
+
+    .mtbl tbody td {
+      padding: 10px 14px;
+      border-top: 1px solid var(--hairline-soft);
+      color: var(--body);
+      line-height: 1.5;
+    }
+
+    .mtbl tbody tr:hover {
+      background: rgba(250, 249, 245, 0.5);
+    }
+
+    /* ── Split System Demo ── */
+    .split-demo {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin: 14px 0;
+    }
+
+    .split-demo .sd-side {
+      border-radius: 12px;
+      padding: 16px;
+    }
+
+    .split-demo .sd-side.bad {
+      background: #fef2f2;
+      border: 2px solid #fecaca;
+    }
+
+    .split-demo .sd-side.good {
+      background: #f0fdf4;
+      border: 2px solid #bbf7d0;
+    }
+
+    .split-demo .sd-label {
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 10px;
+      letter-spacing: 0.3px;
+    }
+
+    .split-demo .sd-side.bad .sd-label {
+      color: #c64545;
+    }
+
+    .split-demo .sd-side.good .sd-label {
+      color: #059669;
+    }
+
+    .split-demo .sd-block {
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-family: var(--font-code);
+      font-size: 11px;
+      margin-bottom: 4px;
+      text-align: center;
+    }
+
+    .split-demo .sd-block.t {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .split-demo .sd-block.s {
+      background: #fef2f2;
+      color: #a9583e;
+    }
+
+    .split-demo .sd-block.m {
+      background: #ecfdf5;
+      color: #065f46;
+    }
+
+    .split-demo .sd-bp {
+      font-family: var(--font-code);
+      font-size: 9px;
+      font-weight: 700;
+      color: var(--primary);
+      text-align: right;
+      margin-top: 2px;
+    }
+
+    .split-demo .sd-inv {
+      font-family: var(--font-code);
+      font-size: 9px;
+      color: #c64545;
+      text-align: center;
+      margin: 2px 0;
+    }
+
+    /* ── Mode Compare ── */
+    .mode-cmp {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin: 14px 0;
+    }
+
+    .mode-cmp .mc-side {
+      border-radius: 14px;
+      padding: 20px 18px;
+      border: 2px solid;
+      text-align: center;
+    }
+
+    .mode-cmp .mc-side.explicit {
+      background: rgba(204, 120, 92, .04);
+      border-color: var(--primary);
+    }
+
+    .mode-cmp .mc-side.auto {
+      background: rgba(93, 184, 166, .06);
+      border-color: var(--accent-teal);
+    }
+
+    .mode-cmp .mc-label {
+      font-family: var(--font-code);
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .mode-cmp .mc-side.explicit .mc-label {
+      color: var(--primary);
+    }
+
+    .mode-cmp .mc-side.auto .mc-label {
+      color: var(--accent-teal);
+    }
+
+    .mode-cmp .mc-desc {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* ── FAQ ── */
+    .faq-card {
+      background: #fff;
+      border: 1px solid var(--hairline);
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin-bottom: 10px;
+    }
+
+    .faq-card .fq {
+      font-family: var(--font-code);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--primary);
+      margin-bottom: 6px;
+    }
+
+    .faq-card .fa {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    /* ── Hash Chain ── */
+    .hash-chain {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin: 14px 0;
+    }
+
+    .hash-chain .hc-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: #fff;
+      border: 1px solid var(--hairline);
+      border-radius: 10px;
+      font-family: var(--font-code);
+      font-size: 13px;
+    }
+
+    .hash-chain .hc-num {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--surface-dark);
+      color: var(--on-dark);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .hash-chain .hc-eq {
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .hash-chain .hc-range {
+      color: var(--primary);
+      font-weight: 500;
+    }
+
+    /* ── Note Footer ── */
+    .note-footer {
+      text-align: center;
+      padding: 20px 0 0;
+      color: var(--muted-soft);
+      font-size: 12px;
+    }
+
+    .note-footer a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+
+    /* ── Inline Code ── */
+    .ic {
+      font-family: var(--font-code);
+      font-size: 12px;
+      background: var(--surface-soft);
+      padding: 1px 6px;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 760px) {
+      .hero h1 {
+        font-size: 30px;
+      }
+
+      .hero {
+        padding: 36px 18px 20px;
+      }
+
+      .tabs-wrap {
+        justify-content: flex-start;
+        padding: 10px 16px;
+        gap: 4px;
+      }
+
+      .tab-btn {
+        padding: 6px 11px;
+        font-size: 12px;
+      }
+
+      .tab-arrow {
+        font-size: 12px;
+        padding: 0 2px;
+      }
+
+      .content {
+        padding: 16px 16px 64px;
+      }
+
+      .card {
+        padding: 22px 18px;
+      }
+
+      .two-col,
+      .three-col,
+      .cmp,
+      .split-demo,
+      .mode-cmp {
+        grid-template-columns: 1fr;
+      }
+
+      .flow-block.tools,
+      .flow-block.system,
+      .flow-block.msgs {
+        padding: 8px 14px;
+        font-size: 12px;
+      }
+
+      .prompt-bar {
+        height: 44px;
+      }
+
+      .prompt-bar .pb-seg {
+        font-size: 11px;
+      }
+
+      .prompt-bar .pb-seg .pb-sub {
+        display: none;
+      }
+
+      .prompt-bar .pb-seg.system .pb-inner .pbi {
+        font-size: 10px;
+      }
+
+      .pb-bp-row .pb-bp .pb-bp-desc {
+        display: none;
+      }
+
+      .walkback {
+        gap: 1px;
+      }
+
+      .walkback .wb {
+        width: 32px;
+        height: 24px;
+        font-size: 9px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- ── Topbar ── -->
+  <div class="topbar">
+    <a class="back" href="../index.html">&larr; 首页</a>
+    <div class="sep"></div>
+    <span class="tag">PROMPT CACHING</span>
+  </div>
+
+  <!-- ── Hero ── -->
+  <div class="hero">
+    <h1>拆解 Anthropic 提示词缓存</h1>
+    <div class="sub">你在 Claude Code 里敲下回车，几十 KB 的 JSON 飞向 API。大部分内容跟你上一轮发过去的一模一样——Anthropic
+      不会让你再付一次钱。下面是从抓包开始，一步步搞清楚这套缓存机制的过程。</div>
+    <div class="rule"></div>
+  </div>
+
+  <!-- ── Tab Navigation ── -->
+  <div class="tabs-wrap">
+    <button class="tab-btn active" data-t="t1">抓包发现</button>
+    <span class="tab-arrow">&rarr;</span>
+    <button class="tab-btn" data-t="t2">处理顺序与级联</button>
+    <span class="tab-arrow">&rarr;</span>
+    <button class="tab-btn" data-t="t3">前缀累积哈希</button>
+    <span class="tab-arrow">&rarr;</span>
+    <button class="tab-btn" data-t="t4">20-block 回溯</button>
+    <span class="tab-arrow">&rarr;</span>
+    <button class="tab-btn" data-t="t5">总结</button>
+  </div>
+
+  <!-- ── Content ── -->
+  <div class="content">
+
+    <!-- ════════════════════════════ Tab 1: 抓包发现 ════════════════════════════ -->
+    <div class="tab-panel active" id="t1">
+
+      <div class="card">
+        <div class="sec-name">一份真实请求的完整结构</div>
+        <p style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:18px;">
+          用抓包工具看一眼 Claude Code 发给 Anthropic API 的请求体，<span class="ic">cache_control</span> 这个字段出现了<strong
+            style="color:var(--ink);">三次</strong>——分别在 system prompt 的两块内容和最后一条 assistant 回复的末尾。<a class="doc-link"
+            href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching" target="_blank">官方文档 &nearr;</a>
+        </p>
+
+        <p style="margin-bottom:14px;">
+          <a href="trace_e4a45e52.html" style="display:inline-block;background:var(--surface-card);color:var(--ink);text-decoration:none;padding:6px 14px;border-radius:999px;font-size:12px;font-weight:500;border:1px solid var(--hairline);transition:all 0.2s;" onmouseover="this.style.borderColor='var(--primary)';this.style.color='var(--primary)'" onmouseout="this.style.borderColor='var(--hairline)';this.style.color='var(--ink)'">📦 查看原始抓包记录 &nearr;</a>
+        </p>
+
+        <div class="dark-box">
+          <div class="dt">Claude Code &rarr; Anthropic API 请求体（精简示意）</div>
+          <div class="dr">
+            {
+              "model": "claude-sonnet-4-6",
+              "system": [
+                {
+                  "type": "text",
+                  "text": "You are Claude Code, Anthropic's official CLI for Claude.",
+                  <span class="j-bp">"cache_control": { "type": "ephemeral" }</span>  &larr; 断点 ①
+                },
+                {
+                  "type": "text",
+                  "text": "\nYou are an interactive agent that helps users...",
+                  <span class="j-bp">"cache_control": { "type": "ephemeral" }</span>  &larr; 断点 ②
+                }
+              ],
+              "messages": [
+                { "role": "user",     "content": [{ "type": "text", "text": "…" }] },
+                { "role": "assistant", "content": [
+                    { "type": "text",     "text": "…" },
+                    { "type": "tool_use", "id": "call_…", "name": "…", "input": {…} }
+                ]},
+                <span class="j-cmt">… 中间对话省略 …</span>
+                { "role": "assistant", "content": [
+                    { "type": "text", "text": "…",
+                      <span class="j-bp">"cache_control": { "type": "ephemeral" }</span> }  &larr; 断点 ③
+                ]}
+              ]
+            }
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sec-name">三个断点的定位逻辑</div>
+
+        <div class="three-col" style="margin-bottom:18px;">
+          <div class="role-card bp">
+            <div class="rl">断点 ①</div>
+            <div class="rd">
+              <strong>system[0] 末尾</strong><br>
+              模型身份声明<br>
+              <span style="font-size:11px;color:var(--muted-soft);">几乎永不变更的固定锚点</span>
+            </div>
+          </div>
+          <div class="role-card bp">
+            <div class="rl">断点 ②</div>
+            <div class="rd">
+              <strong>system[1] 末尾</strong><br>
+              详细行为指令集<br>
+              <span style="font-size:11px;color:var(--muted-soft);">可能随版本更新而变化</span>
+            </div>
+          </div>
+          <div class="role-card bp">
+            <div class="rl">断点 ③</div>
+            <div class="rd">
+              <strong>最后一条 assistant 末尾</strong><br>
+              对话历史尾部<br>
+              <span style="font-size:11px;color:var(--muted-soft);">每轮对话向前滑动</span>
+            </div>
+          </div>
+        </div>
+
+        <div
+          style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--surface-soft);border-radius:10px;">
+          <span style="font-family:var(--font-code);font-size:12px;color:var(--primary);font-weight:600;">锚点 ① &amp;
+            ②</span>
+          <span style="color:var(--muted-soft);">&rarr;</span>
+          <span style="font-size:13px;color:var(--muted);">固定不动，覆盖 tools + system 前缀</span>
+          <span style="color:var(--hairline);margin:0 8px;">|</span>
+          <span style="font-family:var(--font-code);font-size:12px;color:var(--primary);font-weight:600;">锚点 ③</span>
+          <span style="color:var(--muted-soft);">&rarr;</span>
+          <span style="font-size:13px;color:var(--muted);">每轮滑动，覆盖全量对话前缀</span>
+        </div>
+
+        <div class="ins" style="margin-top:14px;"><strong>直觉告诉我们：</strong>这就是三个缓存断点。但为什么要设置三个而不是一个？为什么 system prompt
+          要拆成两块分别放断点？这引出了第一个需要搞清楚的问题——<strong style="color:var(--ink);">API 到底按什么顺序处理这些东西？</strong></div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════ Tab 2: 处理顺序与级联失效 ════════════════════════════ -->
+    <div class="tab-panel" id="t2">
+
+      <div class="card">
+        <div class="sec-name">API 的固定处理顺序</div>
+        <p style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:18px;">
+          HTTP 请求体是一个 JSON 对象，字段在序列化层面没有顺序。但 Anthropic API 在组装 prompt 前缀时，有一个<strong
+            style="color:var(--ink);">固定的处理顺序</strong>，不管 JSON 里各字段怎么排列。<a class="doc-link"
+            href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#how-prompt-caching-works"
+            target="_blank">文档 &nearr;</a>
+        </p>
+
+        <div class="prompt-bar-wrap">
+          <div class="pb-label">prompt 前缀 = tools + system + messages（API 固定组装顺序，与 JSON 字段顺序无关）</div>
+          <div class="prompt-bar">
+            <div class="pb-seg tools">
+              <span>tools</span>
+              <span class="pb-sub">工具定义</span>
+            </div>
+            <div class="pb-seg system">
+              <div class="pb-inner">
+                <div class="pbi sys0">
+                  <span>system[0]</span>
+                  <span class="pb-sub">身份声明</span>
+                </div>
+                <div class="pbi sys1">
+                  <span>system[1]</span>
+                  <span class="pb-sub">指令集</span>
+                </div>
+              </div>
+            </div>
+            <div class="pb-seg msgs">
+              <span>messages</span>
+              <span class="pb-sub">对话历史</span>
+            </div>
+          </div>
+          <div class="pb-bp-row">
+            <div class="pb-bp" style="left: 28%;">
+              <div class="pb-dot"></div>
+              <div class="pb-bp-label">BP ① (cache)</div>
+              <div class="pb-bp-desc">system[0] 末尾</div>
+            </div>
+            <div class="pb-bp" style="left: 52%;">
+              <div class="pb-dot"></div>
+              <div class="pb-bp-label">BP ② (cache)</div>
+              <div class="pb-bp-desc">system[1] 末尾</div>
+            </div>
+            <div class="pb-bp" style="left: 92%;">
+              <div class="pb-dot"></div>
+              <div class="pb-bp-label">BP ③ (cache)</div>
+              <div class="pb-bp-desc">最后一条 assistant 末尾</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ins"><strong>prompt 的设计顺序，直接决定了缓存失效的级联关系。</strong></div>
+      </div>
+
+      <div class="card">
+        <div class="sec-name">级联失效规则</div>
+        <p style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:14px;">
+          前缀匹配的逻辑：<strong style="color:var(--ink);">前面一变，后面全废</strong>，哪怕后面的内容一模一样。<a class="doc-link"
+            href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#structuring-your-prompt"
+            target="_blank">文档 &nearr;</a>
+        </p>
+
+        <table class="mtbl">
+          <thead>
+            <tr>
+              <th>你改了什么</th>
+              <th>哪些缓存会失效</th>
+              <th>影响范围</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="flow-block tools" style="display:inline-block;padding:4px 12px;font-size:12px;">改
+                  tools</span></td>
+              <td>tools + system + 所有 messages</td>
+              <td><span style="color:var(--error);font-weight:600;">全部失效</span></td>
+            </tr>
+            <tr>
+              <td><span class="flow-block system" style="display:inline-block;padding:4px 12px;font-size:12px;">改
+                  system</span></td>
+              <td>system + 所有 messages</td>
+              <td><span style="color:var(--accent-amber);font-weight:600;">部分失效</span></td>
+            </tr>
+            <tr>
+              <td><span class="flow-block msgs" style="display:inline-block;padding:4px 12px;font-size:12px;">改
+                  messages</span></td>
+              <td>仅 messages 部分</td>
+              <td><span style="color:var(--success);font-weight:600;">最小影响</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <div class="sec-name">为什么 system prompt 要拆成两块</div>
+        <p style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:14px;">
+          把 system prompt 拆成两块分别放断点，是一个<strong style="color:var(--ink);">精妙的隔离策略</strong>。<span
+            class="ic">system[0]</span> 是一句简短的模型身份声明（几乎永远不会改），<span class="ic">system[1]</span> 是详细的指令集（可能随 Claude Code
+          版本更新而变化）。
+        </p>
+
+        <div class="split-demo">
+          <div class="sd-side bad">
+            <div class="sd-label">不拆分（一整块 system）</div>
+            <div class="sd-block t">tools 定义</div>
+            <div class="sd-block s">system = 身份声明 + 指令集（一整块）</div>
+            <div class="sd-bp">&larr; 唯一断点：指令集更新 &rarr;</div>
+            <div class="sd-inv">tools 缓存也废了 &cross;</div>
+            <div class="sd-block m" style="opacity:0.5;">messages</div>
+          </div>
+          <div class="sd-side good">
+            <div class="sd-label">拆分（两块 system）</div>
+            <div class="sd-block t">tools 定义</div>
+            <div class="sd-block s">system[0]：身份声明</div>
+            <div class="sd-bp">&larr; 断点 ①：tools + sys[0] 缓存</div>
+            <div class="sd-block s" style="opacity:0.85;">system[1]：指令集</div>
+            <div class="sd-bp">&larr; 断点 ②：断点① + sys[1] 缓存</div>
+            <div style="font-size:11px;color:#059669;text-align:center;margin:6px 0;font-weight:600;">
+              &uarr; 指令集更新 &rarr; 断点①仍命中！
+            </div>
+            <div class="sd-block m">messages</div>
+          </div>
+        </div>
+
+        <div class="ins"><strong>分开设置断点意味着：</strong>指令集更新了，身份声明和 tools 的缓存还能继续命中。这是一层精妙的隔离。</div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════ Tab 3: 前缀累积哈希 ════════════════════════════ -->
+    <div class="tab-panel" id="t3">
+
+      <div class="card">
+        <div class="sec-name">不是分段哈希，是累积前缀</div>
+        <p style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:18px;">
+          看到三个 <span class="ic">cache_control</span> 出现在不同位置，很容易误以为它们是<strong
+            style="color:var(--ink);">三段独立的缓存条目</strong>。实际上每个断点存的是<strong style="color:var(--ink);">从 prompt
+            开头到断点为止的完整前缀哈希</strong>。<a class="doc-link"
+            href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#explicit-cache-breakpoints"
+            target="_blank">文档 &nearr;</a>
+        </p>
+
+        <div class="hash-chain">
+          <div class="hc-item">
+            <div class="hc-num">1</div>
+            <div class="hc-eq">Hash1 =</div>
+            <div class="hc-range">H( tools + system[0] )</div>
+          </div>
+          <div class="hc-item">
+            <div class="hc-num">2</div>
+            <div class="hc-eq">Hash2 =</div>
+            <div class="hc-range">H( tools + system[0] + system[1] )</div>
+          </div>
+          <div class="hc-item">
+            <div class="hc-num">3</div>
+            <div class="hc-eq">Hash3 =</div>
+            <div class="hc-range">H( tools + system[0] + system[1] + 全部 messages )</div>
+          </div>
+        </div>
+
+        <div class="ins" style="margin-top:14px;"><strong>关键结论：</strong>Hash3 天然包含 Hash2 命中的范围，Hash2 天然包含 Hash1 命中的范围。
+          H3 天然包含前两者。它们不是并列关系，是<strong style="color:var(--ink);">嵌套关系</strong>。</div>
+      </div>
+
+      <div class="card">
+        <div class="sec-name">嵌套结构可视化</div>
+        <p style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:14px;">
+          每个断点都告诉 API："到这为止，给这整段区域生成一个缓存 key。"
+        </p>
+
+        <div class="prefix-stack">
+          <div class="ps-row">
+            <div class="ps-bar tools"></div>
+            <div class="ps-body tools">
+              <span style="color:#92400e;font-weight:600;">tools</span>
+              <span style="font-size:11px;color:#a16207;">{ name: "search", input_schema: {...} }</span>
+            </div>
+          </div>
+          <div class="ps-row">
+            <div class="ps-bar sys0"></div>
+            <div class="ps-body sys0">
+              <span style="color:#a9583e;font-weight:600;">system[0]</span>
+              <span style="font-size:11px;color:#b85c3a;">"You are Claude Code, Anthropic's CLI..."</span>
+              <span class="ps-bp">断点 ①</span>
+            </div>
+          </div>
+          <div class="ps-row">
+            <div class="ps-bar sys1"></div>
+            <div class="ps-body sys1">
+              <span style="color:#a9583e;font-weight:600;">system[1]</span>
+              <span style="font-size:11px;color:#b85c3a;">完整指令（可长达几千 token）</span>
+              <span class="ps-bp">断点 ②</span>
+            </div>
+          </div>
+          <div class="ps-row">
+            <div class="ps-bar msgs"></div>
+            <div class="ps-body msgs">
+              <span style="color:#065f46;font-weight:600;">messages</span>
+              <span style="font-size:11px;color:#0d7d5e;">user + assistant 对话历史</span>
+              <span class="ps-bp">断点 ③</span>
+            </div>
+          </div>
+          <div class="ps-row">
+            <div class="ps-bar new"></div>
+            <div class="ps-body new">
+              <span style="color:#991b1b;font-weight:600;">新消息</span>
+              <span style="font-size:11px;color:#b54545;">"那回滚呢？" &larr; 不缓存</span>
+            </div>
+          </div>
+        </div>
+
+        <p style="font-size:12px;color:var(--muted-soft);text-align:center;margin-top:12px;">
+          断点 ① 覆盖范围最小，断点 ③ 覆盖从 tools 到最新消息的全部内容。新消息在断点之外，每次都需要重新计算。
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="sec-name">误解 vs 实际</div>
+
+        <div class="cmp">
+          <div class="cmp-s bad">
+            <div class="st">误解：分段哈希</div>
+            <div class="cd" style="margin-bottom:10px;">三段各自独立存储</div>
+            <div style="font-family:var(--font-code);font-size:11px;color:#c64545;line-height:1.6;">
+              cache-A = H(tools+sys[0])<br>
+              cache-B = H(sys[1] only)<br>
+              cache-C = H(messages only)
+            </div>
+            <div style="font-size:11px;color:#c64545;margin-top:6px;">改 sys[1] &rarr; B 失效，A、C 还在<br>但 A+C 没有
+              sys[1]，<strong>拼不回去</strong></div>
+          </div>
+          <div class="cmp-s good">
+            <div class="st">实际：累积前缀</div>
+            <div class="cd" style="margin-bottom:10px;">每个断点从开头算起</div>
+            <div style="font-family:var(--font-code);font-size:11px;color:#059669;line-height:1.6;">
+              cache-A = H(tools+sys[0])<br>
+              cache-B = H(tools+sys[0]+sys[1])<br>
+              cache-C = H(tools+...+messages)
+            </div>
+            <div style="font-size:11px;color:#059669;margin-top:6px;">改 sys[1] &rarr; B 失效<br>A 还能用，只重算 sys[1]+msgs
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════ Tab 4: 20-block 回溯窗口 ════════════════════════════ -->
+    <div class="tab-panel" id="t4">
+
+      <div class="card">
+        <div class="sec-name">什么是 block</div>
+        <p style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:14px;">
+          Block 是 prompt 的最小组成单元。你在 JSON 里看到的每一个 <span class="ic">{"type": "text", "text": "..."}</span> 就是一个 block，每一个
+          <span class="ic">{"type": "tool_use", ...}</span> 也是一个 block。一轮对话通常产生 <strong style="color:var(--ink);">2~5 个
+            block</strong>，不是固定的。
+        </p>
+
+        <div class="dark-box">
+          <div class="dt">一轮 assistant 回复 &asymp; 多个 block</div>
+          <div class="dr">
+            {
+              "role": "assistant",
+              "content": [
+                { "type": "text",     "text": "让我搜索一下文档..." },  &larr; block 1
+                { "type": "tool_use", "name": "web_search", ... }        &larr; block 2
+              ]
+            }
+          </div>
+        </div>
+        <p style="font-size:12px;color:var(--muted-soft);text-align:center;">block 数 &ne; 轮数，一轮对话可能产生多个 block</p>
+      </div>
+
+      <div class="card">
+        <div class="sec-name">回溯窗口的工作原理</div>
+        <p style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:18px;">
+          每次请求到达 API 时，从每个 <span class="ic">cache_control</span> 断点位置开始，API <strong
+            style="color:var(--ink);">往后退着找</strong>——计算当前位置的完整前缀哈希，去缓存库里查，找不到就退一个 block 重新算、重新查。<strong
+            style="color:var(--ink);">最多退 20 步。</strong><a class="doc-link"
+            href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#explicit-cache-breakpoints"
+            target="_blank">文档 &nearr;</a>
+        </p>
+
+        <p style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:10px;">从断点位置向前回溯（退着找）：</p>
+        <div class="walkback-wrap">
+          <div class="walkback">
+            <span class="wb cached">[15]</span>
+            <span class="wb label">命中!</span>
+            <span class="wb gap">&larr;</span>
+            <span class="wb recalc">[16]</span>
+            <span class="wb recalc">[17]</span>
+            <span class="wb recalc">[18]</span>
+            <span class="wb recalc">[19]</span>
+            <span class="wb recalc">&middot;&middot;&middot;</span>
+            <span class="wb recalc">[33]</span>
+            <span class="wb recalc">[34]</span>
+            <span class="wb current">[35]</span>
+          </div>
+        </div>
+        <p style="font-size:11px;color:var(--muted-soft);text-align:center;margin:6px 0 14px;">
+          退 20 步到 block[15] &rarr; 找到！这是 10 轮前写的缓存 &rarr; 命中！只重算 block[16]~[35]
+        </p>
+
+        <div class="dark-box">
+          <div class="dt">回溯步骤</div>
+          <div class="dr">
+            当前断点位置: block[35]
+              &rarr; 算 hash(前缀+到35) &rarr; 缓存库没有
+              &rarr; 退1步，算 hash(前缀+到34) &rarr; 没有
+              &rarr; 退1步，算 hash(前缀+到33) &rarr; 没有
+              ...
+              &rarr; 退20步，算 hash(前缀+到15) &rarr; <strong>找到了！</strong>
+              &rarr; 命中！只重新算 block[16]~block[35]
+
+            如果退了 20 步都没找到：
+              &rarr; <strong>放弃。全量从头开始算。</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sec-name">正常对话：每轮都命中</div>
+        <p style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:14px;">
+          因为每轮对话只新增 2~5 个 block，从当前断点到上一轮断点（上一次缓存写入的位置），<strong style="color:var(--ink);">距离远远小于 20</strong>。
+        </p>
+
+        <div class="dark-box" style="margin-bottom:12px;">
+          <div class="dt">追加式对话的缓存流</div>
+          <div class="dr">
+            第1次请求: 断点③设在 msg1 末尾 &rarr; 写入 cache-A (覆盖 tools+sys+msg1)
+
+            第2次请求: 断点③设在 msg2 末尾
+              &rarr; API 发现 prefix 匹配 cache-A &rarr; <strong>命中！只算 msg2</strong>
+
+            第3次请求: 断点③设在 msg3 末尾
+              &rarr; prefix 匹配第2次的写入 &rarr; <strong>命中！只算 msg3</strong>
+          </div>
+        </div>
+
+        <div class="cmp">
+          <div class="cmp-s bad">
+            <div class="st">无缓存</div>
+            <div class="cv">100%</div>
+            <div class="cd">每轮重算全部内容</div>
+          </div>
+          <div class="cmp-s good">
+            <div class="st">有缓存</div>
+            <div class="cv">&asymp;10%</div>
+            <div class="cd">每轮只算新增消息</div>
+          </div>
+        </div>
+        <p style="font-size:12px;color:var(--muted-soft);text-align:center;">每轮新增的 1~2 条消息是唯一需要付费计算的部分，节省约 <span
+            class="badge">90%</span> 费用。</p>
+      </div>
+
+      <div class="card">
+        <div class="sec-name">什么时候才会撞到 20-block 天花板</div>
+        <p style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:10px;">
+          只有一种极端场景：<strong style="color:var(--ink);">单轮对话内部产生了大量 block</strong>，多到超出了 20 的窗口。比如 assistant 在一轮回复里疯狂调用了 25
+          次 tool，中间没打任何断点。
+        </p>
+
+        <div class="dark-box">
+          <div class="dt">正常情况：距离 &Lt; 20，无需担心</div>
+          <div class="dr">
+            第N轮: 断点在 block[15] &rarr; 写缓存
+            第N+1轮: 断点在 block[18] &rarr; 退3步找到 block[15] &rarr; <strong>命中</strong>
+            第N+2轮: 断点在 block[21] &rarr; 退3步找到 block[18] &rarr; <strong>命中</strong>
+          </div>
+        </div>
+
+        <div class="ins" style="margin-top:10px;">Claude Code 每轮都在最后一条消息放一个 <span class="ic">cache_control</span>，断点间距永远
+          &Lt; 20。你不需要担心这个天花板。</div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════ Tab 5: 总结 ════════════════════════════ -->
+    <div class="tab-panel" id="t5">
+
+      <div class="card">
+        <div class="sec-name">一条请求的完整缓存命运</div>
+        <p style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:18px;">
+          把前面所有机制串在一起，一次请求到达 Anthropic API 时的完整处理流程：
+        </p>
+
+        <div class="step-list">
+          <div class="step-item">
+            <div class="step-num">1</div>
+            <div class="step-body"><strong>组装前缀：</strong>API 按 tools &rarr; system &rarr; messages 的顺序拼出完整 prompt 前缀</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">2</div>
+            <div class="step-body"><strong>查找缓存：</strong>从请求中 <span class="ic">cache_control</span> 标记的最远位置开始，计算<strong>从 prompt 开头到当前位置</strong>的前缀哈希，去缓存库匹配；未命中就退一个 block，重新算更短前缀的哈希再试，最多退 20 步。这是一次循环查找，每次尝试的前缀终点都不同</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">3</div>
+            <div class="step-body"><strong>分片计算：</strong>命中的前缀直接读缓存（<span class="badge g">节省 90%</span>），未命中的尾部重新计算</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">4</div>
+            <div class="step-body"><strong>写入缓存：</strong>每个断点位置各写入一条缓存（3 个断点 = 3 条嵌套条目，前缀长度依次递增）。<strong>命中的旧条目 TTL 自动刷新</strong>，未命中的写入新条目（按 1.25&times; 或 2&times; 计费）</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">5</div>
+            <div class="step-body"><strong>TTL 管理：</strong>每条缓存独立计时，默认 5 分钟（可延长至 1 小时）。每被命中一次就免费刷新 TTL，超时未被命中则自动清理。BP① 和 BP② 几乎永不过期——每轮请求都会命中并刷新它们的 TTL <a class="doc-link" href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#1-hour-cache-duration" target="_blank">文档 &nearr;</a></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sec-name">两套模式，同一个底层</div>
+        <p style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:14px;">
+          Anthropic 同时提供了两种缓存控制方式，底层缓存服务完全相同。<a class="doc-link"
+            href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#automatic-caching"
+            target="_blank">文档 &nearr;</a>
+        </p>
+
+        <div class="mode-cmp">
+          <div class="mc-side explicit">
+            <div class="mc-label">Explicit Breakpoints</div>
+            <div class="mc-desc">
+              <strong>Claude Code 当前路线</strong><br><br>
+              手动设置三个断点<br>
+              精确控制每个断点位置和 TTL<br>
+              适合需要将 tools 和 system<br>分开缓存的场景
+            </div>
+          </div>
+          <div class="mc-side auto">
+            <div class="mc-label">Automatic Caching</div>
+            <div class="mc-desc">
+              <strong>Anthropic 后来推出的模式</strong><br><br>
+              顶层放一个 cache_control<br>
+              API 自己决定断点位置<br>
+              适合简单场景，减少心智负担
+            </div>
+          </div>
+        </div>
+
+        <div class="ins">两种模式的底层缓存服务完全相同。区别在于谁来负责断点管理：automatic 交给 API，explicit 留在应用层。对于 Claude Code 这种需要将 tools 和
+          system 分开缓存（变更频率不同）的场景，手动控制是合理的。</div>
+      </div>
+
+      <div class="card">
+        <div class="sec-name">缓存命中小技巧</div>
+
+        <div class="step-list">
+          <div class="step-item">
+            <div class="step-num" style="background:var(--success);color:#fff;">1</div>
+            <div class="step-body"><strong>别闲着超过 5 分钟。</strong>缓存 TTL 默认 5 分钟，超时后下一轮请求就得全量重算。保持对话节奏，每 2-3 分钟发一条消息，缓存一直活着。</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num" style="background:var(--accent-amber);color:#fff;">2</div>
+            <div class="step-body"><strong>大胆用 /rewind。</strong>回滚到之前的对话状态几乎<strong>零成本</strong>——那个前缀哈希早就存过了，直接命中。比删消息重发便宜得多。</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num" style="background:var(--error);color:#fff;">3</div>
+            <div class="step-body"><strong>别手贱改 system prompt。</strong>改一个字，级联失效一路炸到 messages。除非你真的需要调整指令，否则让 system 保持字节级一致。</div>
+          </div>
+          <div class="step-item" style="border-color:var(--primary);background:rgba(204,120,92,0.03);">
+            <div class="step-num" style="background:var(--primary);color:#fff;">🐶</div>
+            <div class="step-body"><strong>不要停止对话。</strong>停下来喝杯水？可以。停下来吃个饭？<strong style="color:var(--primary);">你的缓存就没了。</strong>下次再聊，几十 KB 的 system prompt 从头算起——钱包在滴血。所以，<strong style="color:var(--ink);">别停，一直聊下去。</strong> 【狗头】</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sec-name">常见问题</div>
+
+        <div class="faq-card">
+          <div class="fq">Q: 我可以自己加第四个断点吗？</div>
+          <div class="fa">Anthropic <a
+              href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#explicit-cache-breakpoints"
+              target="_blank" style="color:var(--primary);">限制每个请求最多 4 个断点</a>（explicit + automatic 合计）。Claude Code 用了 3
+            个，还有 1 个余量。但除非你有特殊的缓存分区需求，否则不需要——现有的三个断点位置已经能覆盖绝大多数场景。</div>
+        </div>
+
+        <div class="faq-card">
+          <div class="fq">Q: 如果我在中途改了 system prompt，之前 messages 的缓存还有效吗？</div>
+          <div class="fa">没有。system 的哈希变了，后面所有以前缀为基础的缓存全部失效，包括 messages。这就是<strong>级联失效</strong>。</div>
+        </div>
+
+        <div class="faq-card">
+          <div class="fq">Q: 1 小时 TTL 值得用吗？</div>
+          <div class="fa">写成本翻倍（1.25&times; &rarr; 2&times;，详见 <a
+              href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#1-hour-cache-duration"
+              target="_blank" style="color:var(--primary);">1-hour cache duration</a>），但如果你每隔 5~10 分钟回来继续同一段对话，1 小时 TTL
+            能让你回来时缓存还在。适合长时间的研究或调试会话。</div>
+        </div>
+
+        <div class="faq-card">
+          <div class="fq">Q: 不同的 Claude 模型共享缓存吗？</div>
+          <div class="fa">不共享。缓存跟模型版本绑定。Sonnet 的缓存不能给 Opus 用，反之亦然。</div>
+        </div>
+
+        <div class="faq-card">
+          <div class="fq">Q: prompt 里多一个空格缓存会失效吗？</div>
+          <div class="fa">会。缓存做的是<a
+              href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#how-prompt-caching-works"
+              target="_blank" style="color:var(--primary);">精确前缀匹配</a>——加密哈希，字节级别的。多一个空格、换一个大小写，整个哈希就变了，缓存全废。这也是为什么
+            system 和 tools 要保持字节级一致。</div>
+        </div>
+      </div>
+
+      <div class="note-footer">
+        <p>
+          参考资料：
+          <a href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching" target="_blank">Anthropic Prompt
+            Caching 文档</a> &middot;
+          <a href="https://github.com/anthropics/anthropic-cookbook" target="_blank">Anthropic Cookbook</a> &middot;
+          <a href="https://claude.com/blog/token-saving-updates" target="_blank">Token-saving updates 博客</a>
+        </p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── JS ── -->
+  <script>
+    // 剥离 dark-box .dr 中多余的前导空白
+    (function () {
+      document.querySelectorAll('.dark-box .dr').forEach(function (el) {
+        var lines = el.innerHTML.split('\n');
+        if (lines.length <= 1) return;
+        var base = null;
+        for (var i = 0; i < lines.length; i++) {
+          var trimmed = lines[i].trim();
+          if (trimmed.length > 0) {
+            base = lines[i].length - trimmed.length;
+            break;
+          }
+        }
+        if (!base || base === 0) return;
+        el.innerHTML = lines.map(function (l) { return l.slice(base); }).join('\n').trim();
+      });
+    })();
+
+    // Tab 切换
+    (function () {
+      document.querySelectorAll('.tab-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var t = this.dataset.t;
+          document.querySelectorAll('.tab-btn').forEach(function (b) {
+            b.classList.toggle('active', b === btn);
+          });
+          document.querySelectorAll('.tab-panel').forEach(function (p) {
+            p.classList.toggle('active', p.id === t);
+          });
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+      });
+    })();
+  </script>
+</body>
+
+</html>
