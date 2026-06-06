@@ -454,6 +454,93 @@ code {
 .badge.primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
 .badge.g { background: rgba(39,166,68,0.15); color: var(--success); border-color: transparent; }
 
+/* ── Dark page layout refinements ── */
+.hero {
+  max-width: 1320px;
+  padding: 58px 28px 34px;
+}
+
+.hero h1 {
+  max-width: 780px;
+  margin: 0 auto 22px;
+  text-align: center;
+  font-size: clamp(32px, 4vw, 50px);
+  letter-spacing: -1.1px;
+  line-height: 1.1;
+}
+
+.hero .sub {
+  max-width: 1060px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.tabs-wrap {
+  max-width: 1320px;
+  justify-content: center;
+}
+
+.content {
+  max-width: 1320px;
+  padding-top: 34px;
+}
+
+.card {
+  padding: 38px 44px;
+}
+
+.route-grid,
+.mtbl,
+.dark-box,
+.path {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.card,
+.dark-box,
+.ins,
+.cmp-s,
+.path,
+.route-grid,
+.mtbl {
+  max-width: 100%;
+}
+
+.two-col > *,
+.three-col > *,
+.cmp > *,
+.path-leg,
+.path-node,
+.route-grid .rg-row > * {
+  min-width: 0;
+}
+
+p,
+code,
+.ins,
+.path-node,
+.route-grid {
+  overflow-wrap: anywhere;
+}
+
+.tab-btn:focus-visible,
+.topbar .back:focus-visible {
+  outline: 2px solid var(--primary-hover);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* ── Responsive ── */
 @media (max-width: 760px) {
   .hero { padding: 40px 16px 24px; }
@@ -465,7 +552,7 @@ code {
   .cmp { grid-template-columns: 1fr; }
   .three-col { grid-template-columns: 1fr; }
   .two-col { grid-template-columns: 1fr; }
-  .tabs-wrap { justify-content: flex-start; }
+  .tabs-wrap { justify-content: center; }
   .path { flex-direction: column; align-items: stretch; }
   .path-leg { justify-content: flex-start; }
   .path-arrow { transform: rotate(90deg); }
