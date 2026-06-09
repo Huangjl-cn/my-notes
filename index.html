@@ -236,6 +236,10 @@
       --row-tone: var(--tone-transformer);
     }
 
+    a.row.system {
+      --row-tone: var(--tone-system);
+    }
+
     a.row:nth-child(1) {
       animation-delay: 0.12s;
     }
@@ -479,6 +483,7 @@
       --tone-network: #5f6573;
       --tone-agent: #a9783e;
       --tone-transformer: #6f8061;
+      --tone-system: #5a7f8a;
     }
 
     body {
@@ -831,6 +836,17 @@
     <div class="divider"></div>
 
     <div class="list">
+      <a class="row system" href="notes/java-thread.html">
+        <div class="thumb" style="background-image:url('images/java-thread.jpg')">
+          <div class="category">System</div>
+          <div class="date"><span class="label">2026-06-09</span></div>
+        </div>
+        <div class="body">
+          <div class="title">Java 线程与并发：从原始 Thread 到虚拟线程</div>
+          <div class="desc">Java 并发 · 虚拟线程 · CompletableFuture · ForkJoinPool · M:N 调度</div>
+        </div>
+        <div class="arrow">→</div>
+      </a>
       <a class="row cache" href="notes/anthropic-prompt-caching.html">
         <div class="thumb" style="background-image:url('images/anthropic-prompt-caching.jpg')">
           <div class="category">Cache</div>
