@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>从一条命令到缓存策略 — Agent 协议深度探秘</title>
+  <title>Claude Code Agent 协议栈：从工具调用到缓存策略</title>
   <link rel="icon" href="../favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,7 +12,7 @@
     href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap"
     rel="stylesheet">
   <style>
-    /* ── Claude Design Tokens ── */
+    /* ── Design Tokens ── */
     :root {
       --primary: #cc785c;
       --primary-active: #a9583e;
@@ -42,964 +42,444 @@
     }
 
     /* ── Reset ── */
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
 
+    /* ── Body & Texture ── */
     body {
       font-family: var(--font-body);
-      background: var(--canvas);
+      background:
+        radial-gradient(ellipse at 50% -18%, rgba(184,111,82,.10), transparent 42vw),
+        linear-gradient(180deg, #fffaf3 0%, var(--canvas) 46%, #f7efe4 100%);
       color: var(--body);
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
     }
-
-    /* ── Noise Texture ── */
     body::before {
       content: '';
-      position: fixed;
-      inset: 0;
+      position: fixed; inset: 0;
       background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
-      pointer-events: none;
-      z-index: 0;
+      pointer-events: none; z-index: 0;
     }
-
-    /* ── Top Accent Line ── */
     body::after {
       content: '';
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 2px;
-      background: var(--primary);
+      position: fixed; top: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, var(--primary) 0 120px, var(--hairline) 120px 100%);
       z-index: 999;
-    }
-
-    /* ── Topbar ── */
-    .topbar {
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      background: rgba(250, 249, 245, 0.92);
-      -webkit-backdrop-filter: blur(12px);
-      backdrop-filter: blur(12px);
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 24px;
-      border-bottom: 1px solid var(--hairline);
-      font-size: 13px;
-    }
-
-    .topbar .back {
-      color: var(--muted);
-      text-decoration: none;
-      font-weight: 500;
-      transition: color .2s;
-    }
-
-    .topbar .back:hover {
-      color: var(--primary);
-    }
-
-    .topbar .sep {
-      width: 1px;
-      height: 14px;
-      background: var(--hairline);
-    }
-
-    .topbar .tag {
-      color: var(--muted-soft);
-      font-weight: 400;
-      letter-spacing: 0.3px;
-      font-size: 11.5px;
-    }
-
-    .topbar .tag strong {
-      color: var(--muted);
-      font-weight: 600;
-    }
-
-    /* ── Hero ── */
-    .hero {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 64px 24px 32px;
-      text-align: center;
-      animation: fadeIn 0.6s ease-out both;
-    }
-
-    .hero h1 {
-      font-family: var(--font-display);
-      font-size: 42px;
-      font-weight: 500;
-      letter-spacing: -1px;
-      line-height: 1.1;
-      color: var(--ink);
-      max-width: 800px;
-      margin: 0 auto 16px;
-    }
-
-    .hero .sub {
-      font-size: 16px;
-      color: var(--muted);
-      line-height: 1.55;
-      max-width: 600px;
-      margin: 0 auto;
-    }
-
-    .hero .rule {
-      width: 40px;
-      height: 2px;
-      background: var(--primary);
-      margin: 22px auto 0;
-      border-radius: 1px;
     }
 
     /* ── Keyframes ── */
     @keyframes fadeSlideUp {
-      from {
-        opacity: 0;
-        transform: translateY(16px);
-      }
-
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
     }
 
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
-      }
+    /* ── Topbar ── */
+    .topbar {
+      position: sticky; top: 0; z-index: 100;
+      display: flex; align-items: center; gap: 10px;
+      padding: 13px 28px;
+      background: rgba(251,247,239,.86);
+      -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(62,50,40,.10);
+      font-size: 13px;
+    }
+    .topbar .back { color: var(--muted); text-decoration: none; font-weight: 500; }
+    .topbar .back:hover { color: var(--primary); }
+    .topbar .sep { width: 1px; height: 14px; background: var(--hairline); }
+    .topbar .tag {
+      color: var(--muted-soft);
+      font-family: var(--font-code); font-size: 11px;
+      letter-spacing: 1.4px; text-transform: uppercase;
+    }
 
-      to {
-        opacity: 1;
-      }
+    /* ── Hero ── */
+    .hero {
+      position: relative; z-index: 1;
+      max-width: 1320px; margin: 0 auto;
+      padding: 58px 28px 34px; text-align: center;
+    }
+    .hero h1 {
+      max-width: 820px; margin: 0 auto 22px;
+      font-family: var(--font-display);
+      font-size: clamp(34px, 4.2vw, 52px);
+      font-weight: 500; letter-spacing: -1.2px; line-height: 1.08;
+      color: var(--ink);
+    }
+    .hero .sub {
+      max-width: 1060px; margin: 0 auto;
+      font-size: 17px; line-height: 1.75; color: var(--muted);
+    }
+    .hero .rule {
+      width: min(100%, 520px); height: 1px;
+      margin: 28px auto 0;
+      background: linear-gradient(90deg, transparent, var(--primary), transparent);
+    }
+    .hero::before {
+      content: '';
+      position: absolute; left: 50%; top: 30px;
+      width: min(720px, calc(100% - 48px)); height: 110px;
+      transform: translateX(-50%);
+      background:
+        linear-gradient(90deg, transparent 0 8%, rgba(204,120,92,.12) 8% 12%, transparent 12% 18%, rgba(204,120,92,.16) 18% 22%, transparent 22% 30%, rgba(232,165,90,.14) 30% 34%, transparent 34% 44%, rgba(93,184,166,.11) 44% 48%, transparent 48%),
+        repeating-linear-gradient(90deg, transparent 0 44px, rgba(230,223,216,.65) 44px 45px);
+      border-radius: 24px; opacity: 0.7;
+      pointer-events: none; z-index: -1;
+      mask-image: linear-gradient(180deg, #000, transparent 88%);
     }
 
     /* ── Tabs ── */
     .tabs-wrap {
-      position: sticky;
-      top: 41px;
-      z-index: 99;
-      background: rgba(250, 249, 245, 0.92);
-      -webkit-backdrop-filter: blur(12px);
-      backdrop-filter: blur(12px);
-      border-bottom: 1px solid #ebe6df;
+      position: sticky; top: 48px; z-index: 99;
+      width: min(1320px, calc(100% - 48px)); margin: 0 auto 10px;
       padding: 10px 24px;
-      display: flex;
-      max-width: 1200px;
-      margin: 0 auto;
-      gap: 0;
+      display: flex; align-items: center; justify-content: center; gap: 0;
       overflow-x: auto;
-      align-items: center;
-      justify-content: center;
+      border: 1px solid rgba(62,50,40,.10); border-radius: 999px;
+      background: rgba(251,247,239,.84);
+      -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+      box-shadow: 0 18px 44px rgba(56,43,34,.06);
     }
-
     .tab-btn {
-      flex-shrink: 0;
-      padding: 6px 14px;
-      border: 1px solid var(--hairline);
-      border-radius: 999px;
-      background: transparent;
-      color: var(--muted);
-      font-family: var(--font-body);
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all .2s;
-      white-space: nowrap;
+      flex-shrink: 0; padding: 7px 14px;
+      border: 1px solid transparent; border-radius: 999px;
+      background: transparent; color: var(--muted);
+      font-family: var(--font-body); font-size: 13px; font-weight: 500;
+      cursor: pointer; transition: all .2s; white-space: nowrap;
     }
-
-    .tab-btn:hover {
-      border-color: var(--primary);
-      color: var(--ink);
-    }
-
+    .tab-btn:hover { border-color: var(--primary); color: var(--ink); }
     .tab-btn.active {
-      background: var(--primary);
-      color: var(--on-primary);
-      border-color: var(--primary);
+      background: color-mix(in srgb, var(--primary) 10%, var(--surface-soft));
+      color: var(--primary-active);
+      border-color: color-mix(in srgb, var(--primary) 22%, var(--hairline));
     }
-
-    .tab-arrow {
-      flex-shrink: 0;
-      font-size: 13px;
-      color: #c4c0b8;
-      font-weight: 600;
-      padding: 0 4px;
-      user-select: none;
-    }
+    .tab-arrow { flex-shrink: 0; font-size: 13px; color: #c4c0b8; font-weight: 600; padding: 0 4px; user-select: none; }
 
     /* ── Content ── */
     .content {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 28px 24px 60px;
-      width: 100%;
+      position: relative; z-index: 1;
+      max-width: 1320px; margin: 0 auto;
+      padding: 34px 24px 72px;
     }
-
-    .tab-panel {
-      display: none;
-      animation: fadeIn .3s ease-out;
-    }
-
-    .tab-panel.active {
-      display: block;
-    }
+    .tab-panel { display: none; animation: fadeSlideUp .3s ease-out both; }
+    .tab-panel.active { display: block; }
 
     /* ── Card ── */
     .card {
-      background: #fff;
-      border: 1px solid var(--hairline);
-      border-radius: 16px;
-      padding: 28px 28px;
-      margin-bottom: 16px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, .03);
+      background: rgba(255,250,242,.96);
+      border: 1px solid rgba(62,50,40,.10); border-radius: 24px;
+      padding: 38px 44px; margin-bottom: 18px;
+      box-shadow: 0 28px 80px rgba(56,43,34,.08), 0 1px 0 rgba(255,255,255,.9) inset;
     }
-
     .sec-name {
       font-family: var(--font-display);
-      font-size: 22px;
-      font-weight: 500;
-      color: var(--ink);
-      margin-bottom: 16px;
-      padding-left: 14px;
-      border-left: 3px solid var(--primary);
+      font-size: 28px; line-height: 1.08; font-weight: 500; color: var(--ink);
+      margin-bottom: 18px; padding-bottom: 16px;
+      border-bottom: 1px solid var(--hairline);
     }
-
-    .card p {
-      font-size: 14px;
-      line-height: 1.65;
-      color: var(--body);
-      margin-bottom: 12px;
+    .sec-name::before {
+      content: ''; display: block;
+      width: 54px; height: 2px;
+      margin-bottom: 16px; background: var(--primary);
     }
-
-    .card p:last-child {
-      margin-bottom: 0;
-    }
-
-    .card p strong {
-      color: var(--body-strong);
-    }
+    .card p { font-size: 14px; line-height: 1.75; color: var(--body); margin-bottom: 12px; }
+    .card p:last-child { margin-bottom: 0; }
+    .card p strong { color: var(--body-strong); }
 
     /* ── Dark Box ── */
     .dark-box {
-      background: var(--surface-dark);
-      border-radius: 12px;
-      padding: 16px 20px;
-      color: var(--on-dark);
-      margin: 12px 0;
-      overflow-x: auto;
+      background: linear-gradient(180deg, #1c1815, #15120f);
+      border: 1px solid rgba(255,250,242,.08); border-radius: 18px;
+      padding: 22px 24px; margin: 14px 0;
+      color: var(--on-dark); overflow-x: auto; overscroll-behavior-x: contain;
     }
-
     .dark-box .dt {
-      font-size: 11px;
-      color: var(--primary);
-      font-weight: 600;
-      margin-bottom: 8px;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
+      font-size: 12px; color: var(--primary); font-weight: 600;
+      margin-bottom: 10px; letter-spacing: .6px;
     }
-
     .dark-box .dr {
-      font-family: var(--font-code);
-      font-size: 12px;
-      line-height: 1.7;
-      color: var(--on-dark-soft);
-      white-space: pre-wrap;
+      font-family: var(--font-code); font-size: 12px; line-height: 1.7;
+      color: var(--on-dark-soft); white-space: pre; tab-size: 2;
     }
 
     /* ── Inline Code ── */
     code {
-      font-family: var(--font-code);
-      font-size: 12.5px;
-      background: var(--surface-soft);
-      padding: 2px 6px;
-      border-radius: 4px;
-      color: var(--ink);
+      font-family: var(--font-code); font-size: 12.5px;
+      background: var(--surface-soft); padding: 2px 6px;
+      border-radius: 4px; color: var(--ink);
     }
 
     /* ── Insight Box ── */
     .ins {
-      background: var(--surface-soft);
-      border-radius: 10px;
-      padding: 12px 16px;
-      font-size: 13px;
-      color: var(--muted);
-      text-align: center;
-      margin: 12px 0;
-      line-height: 1.55;
-    }
-
-    .ins strong {
-      color: var(--ink);
-    }
-
-    /* ── Model Compare Table ── */
-    .mtbl {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-      margin: 12px 0;
-    }
-
-    .mtbl thead th {
-      background: var(--surface-soft);
-      color: var(--ink);
-      font-weight: 600;
-      padding: 10px 14px;
       text-align: left;
-      border-bottom: 2px solid var(--hairline);
-      font-size: 12.5px;
+      background: #f4ebdf;
+      border: 1px solid var(--hairline); border-left: 3px solid var(--primary);
+      border-radius: 16px; padding: 16px 18px;
+      font-size: 14px; line-height: 1.6; color: var(--muted);
+      margin: 14px 0;
     }
+    .ins strong { color: var(--ink); }
 
-    .mtbl tbody td {
-      padding: 10px 14px;
+    /* ── Table ── */
+    .mtbl {
+      width: 100%; border-collapse: collapse; font-size: 13px;
+      margin: 14px 0;
+      border: 1px solid var(--hairline); border-radius: 14px; overflow: hidden;
+    }
+    .mtbl thead th {
+      background: var(--surface-soft); color: var(--ink); font-weight: 600;
+      padding: 10px 14px; text-align: left;
       border-bottom: 1px solid var(--hairline);
-      color: var(--body);
     }
-
-    .mtbl tbody td:first-child {
-      color: var(--body-strong);
-      font-weight: 500;
+    .mtbl tbody td {
+      padding: 10px 14px; border-bottom: 1px solid var(--hairline-soft); color: var(--body);
     }
-
-    .mtbl tbody tr:last-child td {
-      border-bottom: none;
-    }
-
-    .mtbl tbody tr:hover {
-      background: var(--surface-soft);
-    }
-
-    .mtbl code {
-      font-size: 11.5px;
-    }
+    .mtbl tbody td:first-child { color: var(--body-strong); font-weight: 500; }
+    .mtbl tbody tr:last-child td { border-bottom: none; }
+    .mtbl tbody tr:hover { background: var(--surface-soft); }
+    .mtbl code { font-size: 11.5px; }
 
     /* ── Compare Two-Col ── */
-    .cmp {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      margin: 12px 0;
-    }
-
+    .cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 14px 0; }
     .cmp-s {
-      border-radius: 14px;
-      padding: 20px 16px;
+      border-radius: 18px; border: 1px solid var(--hairline);
+      background: color-mix(in srgb, var(--surface-soft) 72%, #fff 28%);
+      padding: 20px 18px;
     }
-
-    .cmp-s.bad {
-      background: #fef2f2;
-      border: 2px solid #fecaca;
-    }
-
-    .cmp-s.good {
-      background: #f0fdf4;
-      border: 2px solid #bbf7d0;
-    }
-
-    .cmp-s .st {
-      font-size: 14px;
-      font-weight: 700;
-      margin-bottom: 8px;
-    }
-
-    .cmp-s.bad .st {
-      color: #c14d3a;
-    }
-
-    .cmp-s.good .st {
-      color: #059669;
-    }
-
-    .cmp-s ul {
-      list-style: none;
-      padding: 0;
-      font-size: 13px;
-      line-height: 1.65;
-    }
-
-    .cmp-s ul li {
-      padding: 2px 0;
-    }
-
-    .cmp-s ul li::before {
-      content: '· ';
-    }
-
-    .cmp-s.bad ul li::before {
-      color: #c14d3a;
-    }
-
-    .cmp-s.good ul li::before {
-      color: #059669;
-    }
+    .cmp-s .st { font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+    .cmp-s ul { list-style: none; padding: 0; font-size: 13px; line-height: 1.65; }
+    .cmp-s ul li { padding: 2px 0; }
+    .cmp-s ul li::before { content: '· '; }
+    .cmp-s.must { border-left: 3px solid #c64545; background: rgba(198,69,69,.04); }
+    .cmp-s.must .st { color: #b0483a; }
+    .cmp-s.must ul li::before { color: #c64545; }
+    .cmp-s.flex { border-left: 3px solid #5db872; background: rgba(93,184,114,.04); }
+    .cmp-s.flex .st { color: #3d8b55; }
+    .cmp-s.flex ul li::before { color: #5db872; }
+    .cmp-s.caution { border-left: 3px solid #e8a55a; background: rgba(232,165,90,.04); }
+    .cmp-s.caution .st { color: #b87830; }
 
     /* ── Three Column ── */
-    .three-col {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 12px;
-      margin: 12px 0;
-    }
-
+    .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 14px 0; }
     .three-col .col {
-      border-radius: 12px;
-      padding: 18px 14px;
-      text-align: center;
-      border: 2px solid var(--hairline);
-      background: var(--surface-soft);
+      border-radius: 18px; padding: 18px 14px; text-align: center;
+      border: 1px solid var(--hairline);
+      background: color-mix(in srgb, var(--surface-soft) 72%, #fff 28%);
     }
-
     .three-col .col .cl {
-      font-family: var(--font-code);
-      font-size: 17px;
-      font-weight: 700;
-      margin-bottom: 6px;
+      font-family: var(--font-code); font-size: 17px; font-weight: 700;
+      margin-bottom: 6px; color: var(--accent-amber);
     }
-
-    .three-col .col .cd {
-      font-size: 12.5px;
-      color: var(--muted);
-      line-height: 1.45;
-    }
+    .three-col .col .cd { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
 
     /* ── Path Diagram ── */
     .path {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      margin: 24px 0 16px;
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px;
+      margin: 24px 0 16px; padding: 16px;
+      border: 1px solid var(--hairline-soft); border-radius: 18px;
+      background: color-mix(in srgb, var(--surface-soft) 72%, #fff 28%);
     }
-
-    .path-leg {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
+    .path-leg { display: flex; align-items: center; gap: 6px; }
     .path-node {
-      background: #fff;
-      border: 1px solid var(--hairline);
-      border-radius: 12px;
-      padding: 10px 14px;
-      min-width: 88px;
-      text-align: center;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, .04);
+      background: #fff; border: 1px solid var(--hairline); border-radius: 14px;
+      padding: 10px 14px; min-width: 88px; text-align: center;
+      box-shadow: 0 8px 22px rgba(20,20,19,.055);
     }
-
-    .path-node .pn {
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--primary);
-      margin-bottom: 2px;
-    }
-
-    .path-node .pname {
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--ink);
-    }
-
-    .path-node .pmath {
-      font-size: 10.5px;
-      color: var(--muted-soft);
-      font-family: var(--font-code);
-      margin-top: 1px;
-    }
-
-    .path-arrow {
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-    }
-
+    .path-node .pn { font-size: 11px; font-weight: 600; color: var(--primary); margin-bottom: 2px; }
+    .path-node .pname { font-size: 13px; font-weight: 500; color: var(--ink); }
+    .path-node .pmath { font-size: 10.5px; color: var(--muted-soft); font-family: var(--font-code); margin-top: 1px; }
+    .path-node.highlight { border-color: var(--primary); background: var(--surface-soft); }
+    .path-node.highlight .pn { color: var(--ink); }
+    .path-node.highlight .pname { font-weight: 600; }
+    .path-arrow { flex-shrink: 0; display: flex; align-items: center; }
     .path-arrow::after {
       content: '';
       display: block;
       border-left: 6px solid var(--primary);
       border-top: 4.5px solid transparent;
       border-bottom: 4.5px solid transparent;
+      filter: drop-shadow(0 0 8px rgba(204,120,92,.28));
     }
 
     /* ── Step Flow ── */
-    .flow-steps {
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-      margin: 12px 0;
-    }
-
-    .flow-step {
-      display: grid;
-      grid-template-columns: 28px 1fr;
-      gap: 10px;
-      align-items: start;
-      padding: 6px 0;
-    }
-
+    .flow-steps { display: flex; flex-direction: column; gap: 3px; margin: 12px 0; }
+    .flow-step { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; padding: 6px 0; }
     .flow-step .num {
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      background: var(--surface-soft);
-      border: 1px solid var(--hairline);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--muted);
-      flex-shrink: 0;
+      width: 28px; height: 28px; border-radius: 50%;
+      background: color-mix(in srgb, var(--primary) 9%, var(--surface-soft));
+      border: 1px solid color-mix(in srgb, var(--primary) 38%, var(--hairline));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 600; color: var(--primary); flex-shrink: 0;
     }
-
-    .flow-step .fs-text {
-      font-size: 13px;
-      color: var(--body);
-      line-height: 1.55;
-      padding-top: 3px;
-    }
-
-    .flow-step .fs-text strong {
-      color: var(--body-strong);
-    }
+    .flow-step .fs-text { font-size: 13px; color: var(--body); line-height: 1.55; padding-top: 3px; }
+    .flow-step .fs-text strong { color: var(--body-strong); }
 
     /* ── Two-Col Layout ── */
-    .two-col {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 14px;
-      margin: 12px 0;
-    }
-
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 12px 0; }
     .two-col .col-card {
-      background: var(--surface-soft);
-      border-radius: 12px;
-      padding: 16px;
-      border: 1px solid var(--hairline);
+      background: color-mix(in srgb, var(--surface-soft) 72%, #fff 28%);
+      border-radius: 18px; padding: 16px; border: 1px solid var(--hairline);
     }
-
-    .two-col .col-card .cc-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--ink);
-      margin-bottom: 8px;
-    }
-
-    .two-col .col-card .dark-box {
-      margin: 0;
-    }
+    .two-col .col-card .cc-title { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 8px; }
 
     /* ── Badge ── */
     .badge {
       display: inline-block;
-      background: var(--surface-card);
-      color: var(--ink);
-      border-radius: 999px;
-      padding: 4px 12px;
-      font-size: 12px;
-      font-weight: 500;
-      margin: 2px;
-    }
-
-    .badge.coral {
-      background: var(--primary);
-      color: var(--on-primary);
-    }
-
-    /* ── Agent Cycle ── */
-    .cycle-line {
-      text-align: center;
-      padding: 6px 0;
-      color: var(--muted-soft);
-      font-size: 11.5px;
-      font-family: var(--font-code);
-    }
-
-    /* ── Technical field-journal polish ── */
-    .hero {
-      position: relative;
-      z-index: 1;
-    }
-
-    .hero::before {
-      content: '';
-      position: absolute;
-      left: 50%;
-      top: 30px;
-      width: min(720px, calc(100% - 48px));
-      height: 110px;
-      transform: translateX(-50%);
-      background:
-        linear-gradient(90deg, transparent 0 8%, rgba(204, 120, 92, 0.12) 8% 12%, transparent 12% 18%, rgba(204, 120, 92, 0.16) 18% 22%, transparent 22% 30%, rgba(232, 165, 90, 0.14) 30% 34%, transparent 34% 44%, rgba(93, 184, 166, 0.11) 44% 48%, transparent 48%),
-        repeating-linear-gradient(90deg, transparent 0 44px, rgba(230, 223, 216, 0.65) 44px 45px);
-      border-radius: 24px;
-      opacity: 0.7;
-      pointer-events: none;
-      z-index: -1;
-      mask-image: linear-gradient(180deg, #000, transparent 88%);
-    }
-
-    .card {
-      background: rgba(255, 253, 249, 0.94);
-      box-shadow: 0 16px 40px rgba(20, 20, 19, 0.045), 0 1px 0 rgba(255, 255, 255, 0.88) inset;
-    }
-
-    .path {
-      padding: 16px;
-      border: 1px solid var(--hairline-soft);
-      border-radius: 16px;
-      background: linear-gradient(135deg, rgba(245, 240, 232, 0.88), rgba(255, 253, 249, 0.72));
-    }
-
-    .path-node {
-      box-shadow: 0 8px 22px rgba(20, 20, 19, 0.055);
-    }
-
-    .path-arrow::after {
-      filter: drop-shadow(0 0 8px rgba(204, 120, 92, 0.28));
-    }
-
-    .flow-step .num {
-      color: var(--primary);
-      border-color: color-mix(in srgb, var(--primary) 38%, var(--hairline));
-      background: color-mix(in srgb, var(--primary) 9%, var(--surface-soft));
-    }
-
-    .card,
-    .dark-box,
-    .ins,
-    .cmp-s,
-    .path,
-    .mtbl {
-      max-width: 100%;
-    }
-
-    .two-col > *,
-    .three-col > *,
-    .cmp > *,
-    .path-leg,
-    .path-node {
-      min-width: 0;
-    }
-
-    .mtbl,
-    .dark-box,
-    .path {
-      overflow-x: auto;
-      overscroll-behavior-x: contain;
-    }
-
-    p,
-    code,
-    .ins,
-    .path-node,
-    .flow-step {
-      overflow-wrap: anywhere;
-    }
-
-    .tab-btn:focus-visible,
-    .topbar .back:focus-visible {
-      outline: 2px solid var(--primary);
-      outline-offset: 3px;
-    }
-
-    /* ── Premium Claude editorial shell ── */
-    body {
-      background:
-        radial-gradient(ellipse at 50% -18%, rgba(184, 111, 82, 0.10), transparent 42vw),
-        linear-gradient(180deg, #fffaf3 0%, var(--canvas) 46%, #f7efe4 100%);
-    }
-
-    body::after {
-      height: 1px;
-      background: linear-gradient(90deg, var(--primary) 0 120px, var(--hairline) 120px 100%);
-    }
-
-    .topbar {
-      background: rgba(251, 247, 239, 0.86);
-      border-bottom-color: rgba(62, 50, 40, 0.10);
-      padding: 13px 28px;
-    }
-
-    .topbar .tag {
-      font-family: var(--font-code);
-      letter-spacing: 1.2px;
-      color: var(--muted-soft);
-    }
-
-    .hero {
-      max-width: 1320px;
-      padding: 58px 28px 34px;
-      text-align: left;
-    }
-
-    .hero h1 {
-      max-width: 760px;
-      margin: 0 auto 22px;
-      text-align: center;
-      font-size: clamp(34px, 4.2vw, 52px);
-      font-weight: 500;
-      letter-spacing: -1.2px;
-      line-height: 1.08;
-    }
-
-    .hero .sub {
-      max-width: 1060px;
-      margin: 0 auto;
-      text-align: center;
-      font-size: 17px;
-      line-height: 1.75;
-      color: var(--muted);
-    }
-
-    .hero .rule {
-      width: min(100%, 520px);
-      height: 1px;
-      margin: 28px 0 0;
-      background: linear-gradient(90deg, var(--primary) 0 96px, var(--hairline) 96px 100%);
-    }
-
-    .tabs-wrap {
-      top: 48px;
-      width: min(1320px, calc(100% - 48px));
-      border: 1px solid rgba(62, 50, 40, 0.10);
-      border-radius: 999px;
-      background: rgba(251, 247, 239, 0.84);
-      box-shadow: 0 18px 44px rgba(56, 43, 34, 0.06);
-      justify-content: center;
-    }
-
-    .tab-btn {
-      border-color: transparent;
-      color: var(--muted);
-    }
-
-    .tab-btn.active {
-      background: color-mix(in srgb, var(--primary) 10%, var(--surface-soft));
-      color: var(--primary-active);
-      border-color: color-mix(in srgb, var(--primary) 22%, var(--hairline));
-    }
-
-    .content {
-      max-width: 1320px;
-      padding-top: 34px;
-    }
-
-    .card {
-      border-radius: 24px;
-      padding: 38px 44px;
-      background: rgba(255, 250, 242, 0.96);
-      border-color: rgba(62, 50, 40, 0.10);
-      box-shadow: 0 28px 80px rgba(56, 43, 34, 0.08), 0 1px 0 rgba(255, 255, 255, 0.9) inset;
-    }
-
-    .sec-name {
-      font-size: 28px;
-      line-height: 1.08;
-      font-weight: 500;
-      padding-left: 0;
-      padding-bottom: 16px;
-      border-left: 0;
-      border-bottom: 1px solid var(--hairline);
-    }
-
-    .sec-name::before {
-      content: '';
-      display: block;
-      width: 54px;
-      height: 2px;
-      margin-bottom: 16px;
-      background: var(--primary);
-    }
-
-    .dark-box {
-      border-radius: 18px;
-      padding: 22px 24px;
-      background: linear-gradient(180deg, #1c1815, #15120f);
-      border: 1px solid rgba(255, 250, 242, 0.08);
-    }
-
-    .ins {
-      text-align: left;
-      background: #f4ebdf;
-      border: 1px solid var(--hairline);
-      border-left: 3px solid var(--primary);
-      border-radius: 16px;
-      padding: 16px 18px;
-      font-size: 14px;
-    }
-
-    .path,
-    .cmp-s,
-    .three-col .col,
-    .two-col .col-card {
-      border-radius: 18px;
-      border-width: 1px;
-      background: color-mix(in srgb, var(--surface-soft) 72%, #fff 28%);
-    }
-
-    .badge {
       border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--hairline));
-      background: transparent;
-      color: var(--primary-active);
-      font-family: var(--font-code);
-      font-size: 11px;
-      font-weight: 500;
-      letter-spacing: 0.8px;
+      background: transparent; color: var(--primary-active);
+      font-family: var(--font-code); font-size: 11px; font-weight: 500;
+      letter-spacing: .8px; border-radius: 999px; padding: 4px 12px; margin: 2px;
     }
+    .badge.coral { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+
+    /* ── Details (collapsible) ── */
+    details { margin: 14px 0; }
+    details > summary {
+      cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted);
+      padding: 8px 0; border-bottom: 1px solid var(--hairline-soft); list-style: none;
+    }
+    details > summary::-webkit-details-marker { display: none; }
+    details > summary::before {
+      content: '▸ '; display: inline-block; width: 16px;
+      color: var(--primary); transition: transform .2s;
+    }
+    details[open] > summary::before { content: '▾ '; }
+    details[open] > summary { margin-bottom: 10px; }
+    details .dark-box, details .mtbl, details blockquote { margin: 10px 0; }
+    details p { font-size: 13px; color: var(--muted); line-height: 1.65; margin-bottom: 8px; }
+
+    /* ── Misc ── */
+    .cycle-line { text-align: center; padding: 6px 0; color: var(--muted-soft); font-size: 11.5px; font-family: var(--font-code); }
+
+    /* ── Overflow & Responsive Patches ── */
+    .card, .dark-box, .ins, .cmp-s, .path, .mtbl { max-width: 100%; }
+    .two-col > *, .three-col > *, .cmp > *, .path-leg, .path-node { min-width: 0; }
+    .mtbl, .dark-box, .path { overflow-x: auto; overscroll-behavior-x: contain; }
+    p, code, .ins, .path-node, .flow-step { overflow-wrap: anywhere; }
+    .tab-btn:focus-visible, .topbar .back:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
 
     @media (prefers-reduced-motion: reduce) {
-      *,
-      *::before,
-      *::after {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        scroll-behavior: auto !important;
-        transition-duration: 0.01ms !important;
+      *, *::before, *::after {
+        animation-duration: .01ms !important; animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important; scroll-behavior: auto !important;
       }
     }
 
-    /* ── Responsive ── */
     @media (max-width: 760px) {
-      .hero {
-        padding: 40px 16px 24px;
-      }
-
-      .hero h1 {
-        font-size: 30px;
-      }
-
-      .hero .sub {
-        font-size: 14px;
-      }
-
-      .content {
-        padding: 20px 14px 40px;
-      }
-
-      .card {
-        padding: 20px 16px;
-      }
-
-      .sec-name {
-        font-size: 20px;
-      }
-
-      .cmp {
-        grid-template-columns: 1fr;
-      }
-
-      .three-col {
-        grid-template-columns: 1fr;
-      }
-
-      .two-col {
-        grid-template-columns: 1fr;
-      }
-
-      .tabs-wrap {
-        justify-content: center;
-        padding: 10px 14px;
-      }
-
-      .path {
-        flex-direction: column;
-        align-items: stretch;
-      }
-
-      .path-leg {
-        justify-content: flex-start;
-      }
-
-      .path-arrow {
-        transform: rotate(90deg);
-      }
+      .hero { padding: 40px 16px 24px; }
+      .hero h1 { font-size: 30px; }
+      .hero .sub { font-size: 14px; }
+      .content { padding: 20px 14px 40px; }
+      .card { padding: 22px 16px; }
+      .sec-name { font-size: 20px; }
+      .cmp, .two-col { grid-template-columns: 1fr; }
+      .three-col { grid-template-columns: 1fr; }
+      .tabs-wrap { justify-content: center; padding: 10px 16px; }
+      .path { flex-direction: column; align-items: stretch; }
+      .path-leg { justify-content: flex-start; }
+      .path-arrow { transform: rotate(90deg); }
     }
   </style>
 </head>
 
 <body>
 
-  <!-- ═══ Topbar ═══ -->
   <div class="topbar">
     <a class="back" href="../index.html">&larr; 首页</a>
     <div class="sep"></div>
-    <span class="tag"><strong>AGENT</strong> &middot; 协议 &middot; 工具调用</span>
+    <span class="tag">AGENT · 协议栈 · 工具调用</span>
   </div>
 
-  <!-- ═══ Hero ═══ -->
   <div class="hero">
-    <h1>从一条命令到缓存策略</h1>
-    <div class="sub">一次对 Agent 协议、工具调用与消息管理的递进式探秘</div>
+    <h1>Claude Code Agent 协议栈</h1>
+    <div class="sub">从一句 <code>/java-lsp</code> 出发，逐层拆解工具调用、MCP 协议、消息循环与 Context 优化</div>
     <div class="rule"></div>
   </div>
 
-  <!-- ═══ Tab Navigation ═══ -->
   <div class="tabs-wrap">
-    <button class="tab-btn active" data-t="t1">引子</button>
+    <button type="button" class="tab-btn active" data-t="t1">起点</button>
     <span class="tab-arrow">&rarr;</span>
-    <button class="tab-btn" data-t="t2">工具调用</button>
+    <button type="button" class="tab-btn" data-t="t2">机制</button>
     <span class="tab-arrow">&rarr;</span>
-    <button class="tab-btn" data-t="t3">MCP 标准</button>
+    <button type="button" class="tab-btn" data-t="t3">协议</button>
     <span class="tab-arrow">&rarr;</span>
-    <button class="tab-btn" data-t="t4">消息格式</button>
+    <button type="button" class="tab-btn" data-t="t4">循环</button>
     <span class="tab-arrow">&rarr;</span>
-    <button class="tab-btn" data-t="t5">优化</button>
+    <button type="button" class="tab-btn" data-t="t5">优化</button>
     <span class="tab-arrow">&rarr;</span>
-    <button class="tab-btn" data-t="t6">总结</button>
+    <button type="button" class="tab-btn" data-t="t6">回顾</button>
   </div>
 
-  <!-- ═══ Content ═══ -->
   <div class="content">
 
-    <!-- ════════════ Tab 1: 引子 ════════════ -->
+    <!-- ════════════ Tab 1: 起点 ════════════ -->
     <div class="tab-panel active" id="t1">
+
       <div class="card">
-        <div class="sec-name">缘起：一条命令引发的追问</div>
-        <p>在聊天框输入 <code>/java-lsp</code>，Claude Code 对 Java 文件执行了 <code>LSP hover</code>，返回了 diagnostics。但项目明明加了
-          Lombok，为什么 getter 方法的错误赫然在列？</p>
-        <p>检查 <code>.lsp.json</code> 发现 Lombok agent 的 <code>-javaagent</code> 参数已配置，只是 JDT LS 初始化需要时间。二次重试后，Lombok 生成的
-          getter 被正确解析。</p>
-        <div class="ins"><strong>一个正常的工具使用流程结束了。但问题才刚开始——</strong><code>LSP({...})</code> 到底是怎么工作的？</div>
+        <div class="sec-name">一条命令引发的追问</div>
+        <p>在聊天框输入 <code>/java-lsp</code>，Claude Code 对 Java 文件执行了 <code>LSP hover</code>，返回了 diagnostics。但项目明明加了 Lombok，为什么 getter 方法的错误赫然在列？</p>
+        <p>检查 <code>.lsp.json</code> 发现 Lombok agent 的 <code>-javaagent</code> 参数已配置——只是 JDT LS 初始化需要时间。二次重试后，Lombok 生成的 getter 被正确解析，一切恢复正常。</p>
+        <p>一个正常的工具使用流程结束了。但这次排查留下了一个更大的问题：<strong><code>LSP({...})</code> 到底是怎么工作的？</strong>它看起来像一个函数调用——但谁在执行它？参数怎么传过去的？和 <code>Read({...})</code>、<code>Bash({...})</code> 这些工具是同一类东西吗？</p>
       </div>
 
       <div class="card">
-        <div class="sec-name">LSP 不是 shell 命令</div>
-        <p>一个常见误解——以为 <code>LSP({...})</code> 是执行某个 shell 命令来调用 LSP。实际上，两者分工清晰：</p>
+        <div class="sec-name">第一个认知：LSP 不是 shell 命令</div>
+        <p>一个常见的直觉——以为 <code>LSP({...})</code> 背后是某个 shell 命令在启动 LSP 进程。实际上，两者分工清晰：</p>
         <div class="cmp">
-          <div class="cmp-s bad">
-            <div class="st">.lsp.json</div>
+          <div class="cmp-s must">
+            <div class="st">.lsp.json — 配置"怎么启动"</div>
             <ul>
-              <li>配置 JDT LS 如何启动</li>
-              <li>javaagent、classpath 等参数</li>
-              <li>"怎么启动"</li>
+              <li>声明 JDT LS 如何启动（javaagent、classpath 等参数）</li>
+              <li>定义 workspace 路径、JDK 版本等环境配置</li>
+              <li>Claude Code 启动时读取，维护一个长期运行的 LS 进程</li>
             </ul>
           </div>
-          <div class="cmp-s good">
-            <div class="st">LSP({...}) 工具</div>
+          <div class="cmp-s flex">
+            <div class="st">LSP({...}) 工具 — 配置"怎么通信"</div>
             <ul>
-              <li>通过 LSP 协议与已启动的进程通信</li>
-              <li>路径转 URI、行号自动转换</li>
-              <li>"怎么通信"</li>
+              <li>通过 LSP 协议与<strong>已启动的</strong> LS 进程通信</li>
+              <li>将人类友好的参数（路径、行号）转换成 JSON-RPC 请求</li>
+              <li>每次调用是一次请求-响应，不涉及进程启停</li>
             </ul>
           </div>
         </div>
+        <p>这个区分很重要：<code>.lsp.json</code> 管的是 LS 进程的生命周期，<code>LSP({...})</code> 管的是和这个进程的对话协议。理解了这一点，下一个问题自然浮现：<strong>LLM 是怎么"调用"一个工具的？</strong></p>
       </div>
 
       <div class="card">
+        <div class="sec-name">这篇文章要回答的问题</div>
+        <p>从 <code>/java-lsp</code> 出发，我们将逐层拆开整个 Agent 协议栈：</p>
+        <div class="flow-steps">
+          <div class="flow-step">
+            <div class="num">1</div>
+            <div class="fs-text"><strong>LLM 如何表达"我要调工具"？</strong>→ Tool Use 机制的本质</div>
+          </div>
+          <div class="flow-step">
+            <div class="num">2</div>
+            <div class="fs-text"><strong>各家厂商怎么做的？</strong>→ Anthropic / OpenAI / Gemini 格式差异与共识</div>
+          </div>
+          <div class="flow-step">
+            <div class="num">3</div>
+            <div class="fs-text"><strong>MCP 解决了什么问题？</strong>→ 从厂商私有格式到开放协议</div>
+          </div>
+          <div class="flow-step">
+            <div class="num">4</div>
+            <div class="fs-text"><strong>消息如何构成 Agent 的生命线？</strong>→ 多轮 tool_use / tool_result 循环</div>
+          </div>
+          <div class="flow-step">
+            <div class="num">5</div>
+            <div class="fs-text"><strong>Context 为什么是硬通货？</strong>→ message 管理与 Prompt Caching 的工程取舍</div>
+          </div>
+        </div>
+        <p>这不是百科全书式的罗列——每一步都从前一步<strong>自然追问</strong>而来。</p>
+      </div>
+
+    </div>
+
+    <!-- ════════════ Tab 2: 机制 ════════════ -->
+    <div class="tab-panel" id="t2">
+
+      <div class="card">
         <div class="sec-name">LSP 调用的底层映射</div>
-        <p><code>LSP({...})</code> 是 LLM ↔ LSP Server 之间的高层封装。参数会被转换成 JSON-RPC 请求：</p>
+        <p>先从看得见的地方入手。<code>LSP({...})</code> 是 LLM ↔ LSP Server 之间的高层封装，参数会被翻译成标准 JSON-RPC 请求：</p>
         <div class="two-col">
           <div class="col-card">
             <div class="cc-title">你写的调用</div>
@@ -1034,102 +514,115 @@
             </div>
           </div>
         </div>
-        <div class="ins"><strong>关键认知：</strong><code>LSP</code> 处理了路径转 URI、行号 0-based/1-based 转换、方法名映射。它不是一个 shell
-          命令，而是翻译层。</div>
+        <p>这个翻译层做了三件事：<strong>路径转 URI</strong>（Windows 盘符 → <code>file:///</code> 格式）、<strong>行号 0-based 转换</strong>（编辑器行号从 1 开始，LSP 协议从 0 开始）、<strong>方法名映射</strong>（<code>hover</code> → <code>textDocument/hover</code>）。</p>
+        <div class="ins"><strong>关键认知：</strong><code>LSP</code> 不是 shell 命令——它是翻译层。LLM 不需要知道 LSP 协议的细节，它只需要表达"我要 hover 第 49 行"的意图。</div>
       </div>
-    </div>
 
-    <!-- ════════════ Tab 2: 工具调用 ════════════ -->
-    <div class="tab-panel" id="t2">
       <div class="card">
-        <div class="sec-name">Tool Use 机制</div>
-        <p>Claude Code 识别 <code>LSP({...})</code> 不是靠"字符串模式匹配"，而是通过 <strong>Anthropic Messages API 的 Function Calling /
-            Tool Use</strong> 能力——LLM 返回结构化 JSON：</p>
+        <div class="sec-name">Tool Use：LLM 如何表达调用意图</div>
+        <p>翻译层解决的是"怎么执行"，但在这之前还有一个更基础的问题：<strong>LLM 怎么表达"我想调工具"？</strong></p>
+        <p>这不是靠字符串模式匹配。Claude Code 使用的是 <strong>Anthropic Messages API 的原生 Tool Use 能力</strong>——LLM 直接返回结构化 JSON，其中内嵌 <code>type: "tool_use"</code> 标记：</p>
         <div class="dark-box">
-          <div class="dt">LLM 返回消息中的 tool_use</div>
+          <div class="dt">LLM 返回消息（简化的 content block）</div>
           <div class="dr">
           {
             "role": "assistant",
             "content": [
-              { "type": "text", "text": "我先看看..." },
+              { "type": "text", "text": "我先看看这个文件的内容..." },
               {
-                "type": "tool_use", ← 核心标记
-                "name": "LSP", ← 工具名
-                "input": { ← 参数
-                  "operation": "hover",
-                  "filePath": "..."
+                "type": "tool_use", ← 核心标记：这不是文本，是一个工具调用
+                "id": "call_abc123", ← 本次调用的唯一 ID，用于匹配结果
+                "name": "Read",      ← 工具名
+                "input": {           ← 传给工具的参数，JSON Schema 校验
+                  "file_path": "src/ResultUtils.java"
                 }
               }
             ]
           }</div>
         </div>
-        <p>Claude Code 运行时看到 <code>type: "tool_use"</code>，执行流程如下：</p>
+        <p>注意 <code>content</code> 是一个数组——同一条 assistant 消息里可以同时包含文本解释和工具调用。LLM 可以边说话边动手。</p>
+      </div>
+
+      <div class="card">
+        <div class="sec-name">执行四步：从 LLM 决定到结果回传</div>
+        <p>Claude Code 运行时收到 <code>type: "tool_use"</code> 后的完整流程：</p>
         <div class="flow-steps">
           <div class="flow-step">
             <div class="num">1</div>
-            <div class="fs-text"><strong>路由</strong> — 根据 <code>name</code> 找到工具实现（Read、Bash、LSP 等）</div>
+            <div class="fs-text"><strong>路由</strong> — 根据 <code>name</code> 字段找到对应的工具实现。Read 映射到文件系统读取，Bash 映射到 shell 执行，LSP 映射到 Language Server 通信——但 LLM 不关心这个映射，它只知道工具名</div>
           </div>
           <div class="flow-step">
             <div class="num">2</div>
-            <div class="fs-text"><strong>校验</strong> — <code>input</code> 是否匹配工具定义的 JSON Schema</div>
+            <div class="fs-text"><strong>校验</strong> — 将 <code>input</code> 对工具定义的 JSON Schema 做校验。如果 LLM 传了不存在的字段或缺少必填参数，运行时在这一步拦截，不给工具执行的机会</div>
           </div>
           <div class="flow-step">
             <div class="num">3</div>
-            <div class="fs-text"><strong>执行</strong> — 读文件、跑命令、发 LSP 请求</div>
+            <div class="fs-text"><strong>执行</strong> — 校验通过后实际执行：读文件、跑 shell 命令、发 LSP 请求。这一步是<strong>唯一有副作用</strong>的环节</div>
           </div>
           <div class="flow-step">
             <div class="num">4</div>
-            <div class="fs-text"><strong>返回</strong> — 包装成 <code>tool_result</code> 喂回 LLM</div>
+            <div class="fs-text"><strong>回传</strong> — 将执行结果包装成 <code>type: "tool_result"</code>，以 <code>role: "user"</code> 的身份追加到消息列表末尾，喂回 LLM 做下一轮推理</div>
           </div>
         </div>
-        <div class="ins"><strong>核心认知：</strong><code>LSP({...})</code> 与
-          <code>Read({...})</code>、<code>Bash({...})</code> 没有本质区别——都是 LLM 通过 Tool Use 机制调用的内置工具。</div>
+        <div class="ins"><strong>核心认知：</strong><code>LSP({...})</code> 和 <code>Read({...})</code>、<code>Bash({...})</code> 在 LLM 眼里<strong>没有本质区别</strong>——都是 Tool Use 机制下的一个 <code>name</code>。工具实现可以千差万别，但 LLM 只看到统一的结构化调用接口。</div>
       </div>
 
       <div class="card">
-        <div class="sec-name">厂商格式：事实标准</div>
-        <p>这是 <strong>de facto standard（事实标准）</strong>，不是 <strong>de jure standard（法定标准）</strong>。各家训练出来的格式各不相同：</p>
+        <div class="sec-name">厂商格式：事实标准的分化</div>
+        <p>Tool Use 是 <strong>de facto standard（事实标准）</strong>——各家 LLM 厂商都支持，但具体格式是各自设计的。没有 ISO 规范，只有"大家都这么干"：</p>
         <table class="mtbl">
           <thead>
-            <tr>
-              <th>概念</th>
-              <th>Anthropic</th>
-              <th>OpenAI</th>
-              <th>Gemini</th>
-            </tr>
+            <tr><th>概念</th><th>Anthropic</th><th>OpenAI</th><th>Gemini</th></tr>
           </thead>
           <tbody>
-            <tr>
-              <td>工具定义</td>
-              <td><code>tools</code></td>
-              <td><code>tools</code></td>
-              <td><code>tools</code></td>
-            </tr>
-            <tr>
-              <td>调用标记</td>
-              <td><code>type: "tool_use"</code></td>
-              <td><code>tool_calls</code> 顶层字段</td>
-              <td><code>functionCall</code> 在 parts 里</td>
-            </tr>
-            <tr>
-              <td>结果返回</td>
-              <td><code>type: "tool_result"</code></td>
-              <td><code>role: "tool"</code></td>
-              <td><code>role: "function"</code></td>
-            </tr>
+            <tr><td>工具定义</td><td><code>tools</code> 数组</td><td><code>tools</code> 数组</td><td><code>tools</code> 数组</td></tr>
+            <tr><td>调用标记</td><td><code>type: "tool_use"</code></td><td><code>tool_calls</code> 顶层字段</td><td><code>functionCall</code> 在 parts 里</td></tr>
+            <tr><td>参数位置</td><td><code>input</code> 字段（JSON 对象）</td><td><code>function.arguments</code>（JSON 字符串）</td><td><code>args</code> 字段（JSON 对象）</td></tr>
+            <tr><td>结果返回</td><td><code>type: "tool_result"</code></td><td><code>role: "tool"</code></td><td><code>role: "function"</code></td></tr>
+            <tr><td>并行调用</td><td>content 数组中多个 tool_use</td><td>tool_calls 数组中多项</td><td>parts 中多个 functionCall</td></tr>
           </tbody>
         </table>
-        <div class="ins"><strong>底层逻辑完全一致：</strong>LLM 输出一段结构化 JSON → 运行时识别 → 执行 → 塞回结果到对话。</div>
+        <div class="ins"><strong>底层逻辑完全一致，但字段名、嵌套结构、参数编码方式各不相同。</strong>这意味着如果你直接对接各家 API，需要为每个厂商写一套解析逻辑。</div>
+
+        <details>
+          <summary>为什么没有统一标准？</summary>
+          <p>LLM 的 Tool Use 能力是 2023–2024 年各家独立演进的产物。Anthropic 在 Claude 2 时率先引入 First-Party Tool Use（content block 内嵌 <code>tool_use</code>），OpenAI 在 GPT-4 发布时采用了不同的 <code>tool_calls</code> 顶层字段方案，Google 则在 Gemini 的 <code>parts</code> 结构中承载 <code>functionCall</code>。</p>
+          <p>没有标准委员会先于实现——每家都在 API 设计上做了不同取舍：Anthropic 选择把 tool_use 和 text 平级放在 content 数组中（允许交错思考），OpenAI 选择把 tool_calls 作为 assistant message 的独立顶层字段（和 content 并列），Google 则因为 Gemini 本身就是多模态 parts 架构，functionCall 自然成了 parts 的一种类型。</p>
+          <p>直到 Anthropic 提出 <strong>Model Context Protocol (MCP)</strong>，才有了第一个跨厂商的工具通信标准尝试——详见下一 Tab。</p>
+        </details>
       </div>
+
+      <div class="card">
+        <div class="sec-name">所以 Tool Use 不是什么黑魔法</div>
+        <p>抛开所有术语，Tool Use 的本质就是三步：</p>
+        <div class="three-col">
+          <div class="col">
+            <div class="cl">LLM</div>
+            <div class="cd">输出一段结构化的 JSON，声明"我要调用 X 工具，参数是 Y"</div>
+          </div>
+          <div class="col">
+            <div class="cl">Runtime</div>
+            <div class="cd">识别 <code>tool_use</code> 标记，路由到对应实现，执行后将结果包装成 <code>tool_result</code></div>
+          </div>
+          <div class="col">
+            <div class="cl">Loop</div>
+            <div class="cd">结果追加到消息历史，LLM 再次推理——可能继续调工具，也可能给出最终回答</div>
+          </div>
+        </div>
+        <p>这个循环的工程上限，就是消息历史的管理能力——那是 Tab 4 和 Tab 5 要讨论的问题。在此之前，先看一个关键进展：<strong>MCP 如何把厂商私有格式变成了开放标准</strong>。</p>
+      </div>
+
     </div>
 
-    <!-- ════════════ Tab 3: MCP 标准 ════════════ -->
+    <!-- ════════════ Tab 3: 协议 ════════════ -->
     <div class="tab-panel" id="t3">
+
       <div class="card">
-        <div class="sec-name">MCP：真正的开放协议</div>
-        <p><strong>MCP（Model Context Protocol）</strong> 是 Anthropic 主导的开放协议，有公开规范、任何人可实现。所有消息基于 <strong>JSON-RPC 2.0</strong>，传输层可选 stdio、SSE 或 HTTP。</p>
+        <div class="sec-name">MCP：给工具通信定一个开放标准</div>
+        <p><strong>Model Context Protocol (MCP)</strong> 是 Anthropic 主导的开放协议。它的设计动机很直接：上一 Tab 我们看到 Tool Use 在各家 API 里的格式各不相同——MCP 要解决的就是<strong>工具实现方和 LLM 平台方的解耦问题</strong>。</p>
+        <p>MCP 选择了 <strong>JSON-RPC 2.0</strong> 作为消息信封——这是一个成熟、简单、语言无关的远程调用协议：</p>
         <div class="dark-box">
-          <div class="dt">MCP 消息基础（JSON-RPC 2.0）</div>
+          <div class="dt">MCP 消息基础（所有消息都套在这个外壳里）</div>
           <div class="dr">
           {
             "jsonrpc": "2.0",
@@ -1138,113 +631,120 @@
             "params": {}
           }</div>
         </div>
+        <p>传输层可选 <strong>stdio</strong>（子进程标准输入输出，零网络配置）、<strong>SSE</strong>（Server-Sent Events，适合服务端推送场景）或 <strong>HTTP</strong>。本地工具用 stdio 最直接——Claude Code 启动一个 MCP Server 子进程，通过 stdin/stdout 交换 JSON-RPC 消息。</p>
       </div>
 
       <div class="card">
-        <div class="sec-name">硬性要求：必须遵守的格式</div>
-        <p>MCP 对以下字段有强制规定，实现方不能省略或改名：</p>
+        <div class="sec-name">协议的骨架：什么必须遵守、什么可以自由</div>
+        <p>MCP 的设计哲学是<strong>规定通信框架，不规定业务逻辑</strong>：</p>
         <div class="cmp">
-          <div class="cmp-s" style="border-left:3px solid #c64545;">
-            <div class="st">必须字段（硬性）</div>
+          <div class="cmp-s must">
+            <div class="st">硬性要求（不遵守就无法互通）</div>
             <ul>
-              <li><strong>JSON-RPC 外壳：</strong> <code>jsonrpc: "2.0"</code>、<code>id</code>、<code>method</code> 三个字段固定</li>
-              <li><strong>initialize 握手：</strong> 连接建立后必须先发 <code>initialize</code> 交换协议版本和能力</li>
-              <li><strong>tools/list 响应：</strong> 每个工具必须有 <code>name</code> 和 <code>inputSchema</code></li>
-              <li><strong>tools/call 请求：</strong> 必须包含 <code>name</code> + <code>arguments</code></li>
-              <li><strong>tools/call 响应：</strong> 必须返回 <code>content</code> 数组，每项须有 <code>type</code></li>
+              <li><strong>JSON-RPC 外壳：</strong>每条消息必须有 <code>jsonrpc: "2.0"</code>、<code>id</code>、<code>method</code>（请求）或 <code>result</code>/<code>error</code>（响应）</li>
+              <li><strong>initialize 握手：</strong>连接建立后必须先交换 <code>initialize</code> 请求/响应，协商协议版本和双方能力</li>
+              <li><strong>tools/list 响应结构：</strong>每个工具必须有 <code>name</code>（唯一标识）和 <code>inputSchema</code>（JSON Schema 定义参数）</li>
+              <li><strong>tools/call 请求/响应：</strong>请求必须含 <code>name</code> + <code>arguments</code>；响应必须返回 <code>content</code> 数组，每项含 <code>type</code></li>
             </ul>
           </div>
-          <div class="cmp-s" style="border-left:3px solid #5db872;">
-            <div class="st">可自定义（灵活）</div>
+          <div class="cmp-s flex">
+            <div class="st">自由空间（完全由实现方决定）</div>
             <ul>
-              <li><strong>工具名与描述：</strong> <code>name</code>、<code>description</code> 你随便定</li>
-              <li><strong>参数结构：</strong> <code>inputSchema</code> 的 <code>properties</code>、<code>required</code> 全是你的领域逻辑</li>
-              <li><strong>传输层：</strong> stdio（子进程）、SSE（服务端推送）、HTTP 任选</li>
-              <li><strong>服务能力：</strong> 除 tools 外可选加 resources、prompts 等</li>
-              <li><strong>认证方式：</strong> 协议自身不限制，应用层自定</li>
+              <li><strong>工具名与描述：</strong><code>name</code> 和 <code>description</code> 是你定义的——LLM 靠 <code>description</code> 理解何时使用</li>
+              <li><strong>参数结构：</strong><code>inputSchema</code> 里的 <code>properties</code>、<code>required</code> 完全是领域逻辑</li>
+              <li><strong>传输层：</strong>stdio（子进程）、SSE（推送）、HTTP 任选，协议层不依赖传输</li>
+              <li><strong>扩展能力：</strong>除 tools 外，可选实现 resources（暴露数据）、prompts（预置提示模板）、sampling（服务端发起 LLM 请求）</li>
+              <li><strong>认证方式：</strong>协议自身不限制，应用层自行决定 token/OAuth/互相 TLS</li>
             </ul>
           </div>
         </div>
-        <div class="ins"><strong>一句话：</strong> MCP 规定了"怎么包装请求/响应"的框架，但"工具叫什么、参数怎么传、数据怎么跑"全由你定。</div>
+        <div class="ins"><strong>一句话：</strong>MCP 规定了消息怎么封包、怎么路由，但"工具有什么能力、参数长什么样、数据怎么处理"是你的事。框架统一，内容自由。</div>
       </div>
 
       <div class="card">
-        <div class="sec-name">协议三阶段</div>
+        <div class="sec-name">协议三阶段：初始化 → 发现 → 调用</div>
+        <p>每个 MCP 连接的生命周期分三个阶段，顺序固定：</p>
         <div class="three-col">
           <div class="col">
-            <div class="cl" style="color:var(--accent-amber);">初始化</div>
-            <div class="cd">所有连接以 <code>initialize</code> 握手开始，双方交换能力信息和协议版本</div>
+            <div class="cl">初始化</div>
+            <div class="cd">Client 发 <code>initialize</code> 声明自己的协议版本和能力；Server 回应支持的版本和自身能力集。只有握手成功，后续通信才被接受</div>
           </div>
           <div class="col">
-            <div class="cl" style="color:var(--accent-amber);">注册</div>
-            <div class="cd"><code>tools/list</code> 响应中声明工具名、描述、<code>inputSchema</code></div>
+            <div class="cl">发现</div>
+            <div class="cd">Client 发 <code>tools/list</code> 请求，Server 返回所有可用工具的定义列表（name + description + inputSchema）。LLM 根据这些定义决定何时调用哪个工具</div>
           </div>
           <div class="col">
-            <div class="cl" style="color:var(--accent-amber);">调用</div>
-            <div class="cd"><code>tools/call</code> 传入 <code>name</code> + <code>arguments</code>，返回
-              <code>content</code> 数组</div>
+            <div class="cl">调用</div>
+            <div class="cd">Client 发 <code>tools/call</code> 传入工具名和参数；Server 执行后返回 <code>content</code> 数组。一次连接可发起多次调用，无需重复握手</div>
           </div>
         </div>
       </div>
 
       <div class="card">
-        <div class="sec-name">工具注册与调用的完整消息</div>
-        <p>MCP 的所有消息都套在 <strong>JSON-RPC 2.0</strong> 信封里。关键区分：</p>
+        <div class="sec-name">一条完整的工具调用消息</div>
+        <p>把三个阶段的消息串起来看——这是一个完整 MCP 工具调用的请求和响应：</p>
         <div class="two-col">
           <div class="col-card">
-            <div class="cc-title">← 请求：method + params</div>
+            <div class="cc-title">← 请求：告诉 Server 调哪个工具</div>
             <div class="dark-box">
               <div class="dr">
               {
-                "jsonrpc": "2.0",   ← 固定
-                "id": 1,            ← 请求 ID
-                "method": "tools/call",  ← 方法名
-                "params": {          ← 参数放这里
+                "jsonrpc": "2.0",   ← JSON-RPC 外壳，固定
+                "id": 7,            ← 请求 ID，响应时原样返回
+                "method": "tools/call",  ← MCP 方法名
+                "params": {          ← 参数放在这里
                   "name": "search",      ← 工具名
-                  "arguments": {         ← 工具参数
-                    "query": "hello"
+                  "arguments": {         ← 工具的业务参数
+                    "query": "context window optimization"
                   }
                 }
               }</div>
             </div>
           </div>
           <div class="col-card">
-            <div class="cc-title">→ 响应（或请求）：result</div>
+            <div class="cc-title">→ 响应：Server 返回执行结果</div>
             <div class="dark-box">
               <div class="dr">
               {
-                "jsonrpc": "2.0",   ← 固定
-                "id": 1,            ← 对应请求 ID
-                "result": {          ← 结果放这里
-                  "content": [
+                "jsonrpc": "2.0",   ← 外壳一致
+                "id": 7,            ← 对应请求 ID
+                "result": {          ← 结果放在这里
+                  "content": [       ← 必须是一个数组
                     {
                       "type": "text",
-                      "text": "结果..."
+                      "text": "找到 3 篇相关文档：\n1. ..."
                     }
                   ],
-                  "isError": false
+                  "isError": false   ← 标记工具自身是否出错
                 }
               }</div>
             </div>
           </div>
         </div>
 
-        <p style="margin-top:12px;">服务端注册工具时，工具定义列表也放在 <code>result</code> 里返回：</p>
+        <p style="margin-top:12px;">工具注册发生在初始化之后——Server 通过 <code>tools/list</code> 响应告诉 Client 自己有哪些工具：</p>
         <div class="dark-box" style="margin-top:0;">
           <div class="dt">tools/list 响应（也是 JSON-RPC 信封）</div>
           <div class="dr">
           {
             "jsonrpc": "2.0",
-            "id": 1,
+            "id": 2,
             "result": {
               "tools": [
                 {
-                  "name": "search",           ← 必填：工具唯一名
-                  "description": "搜索功能",     ← 推荐：LLM 靠它理解用途
-                  "inputSchema": {               ← 必填：参数定义
+                  "name": "search",              ← 必填：工具唯一标识名
+                  "description": "搜索知识库中的文档", ← 推荐：LLM 根据这段文字判断何时使用
+                  "inputSchema": {                  ← 必填：参数定义
                     "type": "object",
                     "properties": {
-                      "query": { "type": "string" }
+                      "query": {
+                        "type": "string",
+                        "description": "搜索关键词"
+                      },
+                      "maxResults": {
+                        "type": "number",
+                        "default": 10
+                      }
                     },
                     "required": ["query"]
                   }
@@ -1253,313 +753,323 @@
             }
           }</div>
         </div>
-        <div class="ins"><strong>记住：</strong>响应必须有 <code>result</code>（成功时）或 <code>error</code>（失败时），二选一不能缺。<br>
-        请求用 <code>method</code> + <code>params</code> 告诉服务端"调哪个工具、传什么参"；<br>
-        响应用 <code>result.content</code> 返回执行结果，用 <code>result.isError</code> 标记工具自身异常。<br>
-        最外层的 <code>jsonrpc</code> + <code>id</code> 是 JSON-RPC 2.0 协议外壳，<strong>每条消息都必须有</strong>。</div>
+        <div class="ins">
+          <strong>记住三条：</strong><br>
+          ① 请求用 <code>method</code> + <code>params</code> 表达"调哪个工具、传什么参"<br>
+          ② 响应用 <code>result.content</code> 数组返回执行结果，<code>result.isError</code> 标记工具自身异常<br>
+          ③ 最外层的 <code>jsonrpc</code> + <code>id</code> 是 JSON-RPC 2.0 协议外壳——<strong>每条消息都必须有</strong>
+        </div>
       </div>
 
       <div class="card">
-        <div class="sec-name">MCP 优缺点</div>
+        <div class="sec-name">MCP 的取舍：统一接口的代价</div>
         <div class="cmp">
-          <div class="cmp-s" style="border-left:3px solid #5db872;">
+          <div class="cmp-s flex">
             <div class="st">优势</div>
             <ul>
-              <li><strong>统一接口：</strong> 写一套 Server，所有 MCP Client 都能用，不用为每个 LLM 单独适配</li>
-              <li><strong>解耦职责：</strong> 工具开发者只需关注业务逻辑，不需要了解 LLM 内部机制</li>
-              <li><strong>实时推送：</strong> SSE 传输支持服务端主动推送结果，适合流式场景</li>
-              <li><strong>渐进增强：</strong> 可从纯 tools 起步，按需加 resources、prompts、sampling</li>
-              <li><strong>传输灵活：</strong> 本地 stdio（零配置）、远程 SSE（实时）、HTTP 按需切换</li>
+              <li><strong>统一接口：</strong>写一套 MCP Server，所有 MCP Client 都能用——不用为每个 LLM 平台单独适配工具</li>
+              <li><strong>解耦职责：</strong>工具开发者只需关注业务逻辑，不需要了解各家 LLM API 的 tool_use / tool_calls 格式差异</li>
+              <li><strong>实时推送：</strong>SSE 传输支持服务端主动推送结果，适合流式、长时间任务</li>
+              <li><strong>渐进增强：</strong>从纯 tools 起步，按需加 resources（暴露数据源）、prompts（预置提示）、sampling（Server 请求 LLM）</li>
+              <li><strong>传输灵活：</strong>本地 stdio（零配置调试）、远程 SSE（实时推送）、HTTP 按场景切换</li>
             </ul>
           </div>
-          <div class="cmp-s" style="border-left:3px solid #e8a55a;">
+          <div class="cmp-s caution">
             <div class="st">局限</div>
             <ul>
-              <li><strong>全量加载，不能惰性：</strong> tools/list 一次返回所有工具定义，全部塞进 LLM 上下文。挂 10 个 Server 每个 20 个工具，就是 200 个定义占着 token</li>
-              <li><strong>上下文污染：</strong> 不像 Claude Code 的 skill 按需触发、用完即走，MCP 的工具定义一直待在 system prompt 里，没用也在</li>
-              <li><strong>无标准认证：</strong> 协议不规定 auth 方式，公网服务得自己实现 token/OAuth</li>
-              <li><strong>调试门槛：</strong> 不像 REST 有 curl 可直接测，需要专用 Client 或 MCP Inspector</li>
+              <li><strong>全量加载，不能惰性：</strong><code>tools/list</code> 一次性返回所有工具定义，全部塞进 LLM 上下文。挂 10 个 MCP Server 每个 20 个工具 = 200 个工具定义常驻 system prompt</li>
+              <li><strong>上下文永久占用：</strong>MCP 的工具定义一直待在 system prompt 里，即使这次对话根本用不到。和 Claude Code 的 skill（按需触发、用完即走）是完全不同的哲学</li>
+              <li><strong>无标准认证：</strong>协议不规定 auth 方式——公网 MCP Server 需要自行实现 token / OAuth / mTLS</li>
+              <li><strong>调试门槛：</strong>不像 REST API 可以用 curl 直接测——需要 MCP Inspector 或专用 Client</li>
             </ul>
           </div>
         </div>
-        <div class="ins"><strong>所以现在 CLI 工具反而更香：</strong> skill 只有被调用时才出现在上下文中，MCP Server 的工具定义则是永久占位。挂的 MCP Server 越多，浪费的 token 越多。<strong>MCP 适合稳定的、常用的工具集；偶发任务用 skill/CLI 按需触发更省上下文。</strong></div>
+
+        <details>
+          <summary>MCP vs Skill/CLI：上下文经济学的两种路线</summary>
+          <p>MCP 和 Claude Code Skill 代表了工具集成的两种根本策略：</p>
+          <table class="mtbl">
+            <thead><tr><th>维度</th><th>MCP Server</th><th>Skill / CLI 工具</th></tr></thead>
+            <tbody>
+              <tr><td>工具定义位置</td><td>常驻 system prompt</td><td>只在被调用时注入 context</td></tr>
+              <tr><td>上下文成本</td><td>固定开销（N 个工具 × 每个定义 ~200 token）</td><td>零开销直到触发</td></tr>
+              <tr><td>适用场景</td><td>高频、稳定、通用工具（搜索、数据库、文件系统）</td><td>偶发、领域特定、复杂工作流</td></tr>
+              <tr><td>发现机制</td><td>LLM 从 tool list 中选择</td><td>用户显式调用或用 description 匹配</td></tr>
+              <tr><td>工具数量上限</td><td>受 context window 约束，建议 &lt; 50 个</td><td>理论上无限，只有调用的才占用 token</td></tr>
+            </tbody>
+          </table>
+          <p><strong>结论不是二选一。</strong>高频核心工具放 MCP（稳定、通用、值得占用上下文），偶发复杂工作流用 Skill/CLI 按需触发（不调用就不花钱）。工程上的判断标准是：<strong>这个工具在多少比例的对话中会被用到？</strong></p>
+        </details>
       </div>
 
-      <div class="card">
-        <div class="sec-name">厂商调用 vs MCP</div>
-        <table class="mtbl">
-          <thead>
-            <tr>
-              <th></th>
-              <th>厂商工具调用</th>
-              <th>MCP</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>范围</td>
-              <td>单次 API 请求的响应格式</td>
-              <td>完整的应用层协议</td>
-            </tr>
-            <tr>
-              <td>标准化</td>
-              <td>厂商各自风格</td>
-              <td>公开规范，任何人可实现</td>
-            </tr>
-            <tr>
-              <td>实现方</td>
-              <td>LLM API 提供商</td>
-              <td>各种工具开发者</td>
-            </tr>
-            <tr>
-              <td>传输</td>
-              <td>单次 HTTP</td>
-              <td>stdio、SSE、HTTP</td>
-            </tr>
-          </tbody>
-        </table>
-        <div class="ins"><strong>串起来理解：</strong><code>tool_use</code> / <code>tool_calls</code> 是 LLM 和 API
-          之间的约定；<strong>MCP 是 Claude Code 和外部工具 Server 之间的标准协议。</strong></div>
-      </div>
     </div>
 
-    <!-- ════════════ Tab 4: 消息格式 ════════════ -->
+    <!-- ════════════ Tab 4: 循环 ════════════ -->
     <div class="tab-panel" id="t4">
+
       <div class="card">
-        <div class="sec-name">LLM 消息格式趋同</div>
-        <p>虽然各家字段名有差异，但 <strong>messages 数组 + role 区分</strong> 已是业界共识：</p>
+        <div class="sec-name">消息格式的高度趋同</div>
+        <p>Tool Use 和 MCP 解决的是"怎么调用"，但它们都依赖一个更基础的数据结构：<strong>消息数组</strong>。不管哪家 API，核心模式都是 <code>messages</code> 数组 + <code>role</code> 区分发言者：</p>
         <div class="dark-box">
-          <div class="dt">通用消息结构</div>
+          <div class="dt">通用消息结构（伪代码，所有厂商都是这个模式）</div>
           <div class="dr">
           {
             "messages": [
-              { "role": "system", "content": "你是助手..." },
-              { "role": "user", "content": "看一下这个文件" },
-              { "role": "assistant", "content": "好的" },
-              { "role": "user", "content": "再帮我改一下" }
+              { "role": "system", "content": "你是 Claude Code，一个 AI 编程助手..." },
+              { "role": "user", "content": "看一下 ResultUtils.java 的内容" },
+              { "role": "assistant", "content": "好的，我来读取这个文件" },
+              { "role": "user", "content": "再帮我检查 LSP diagnostics" }
             ]
           }</div>
         </div>
-      </div>
-
-      <div class="card">
-        <div class="sec-name">各家消息差异</div>
+        <p>但`role` 的命名和消息承载方式在不同厂商之间有微妙差异：</p>
         <table class="mtbl">
           <thead>
-            <tr>
-              <th></th>
-              <th>Anthropic</th>
-              <th>OpenAI</th>
-              <th>Gemini</th>
-            </tr>
+            <tr><th></th><th>Anthropic</th><th>OpenAI</th><th>Gemini</th></tr>
           </thead>
           <tbody>
-            <tr>
-              <td>消息字段</td>
-              <td><code>messages</code></td>
-              <td><code>messages</code></td>
-              <td><code>contents</code></td>
-            </tr>
-            <tr>
-              <td>系统消息</td>
-              <td><code>role: "system"</code></td>
-              <td><code>role: "system"</code></td>
-              <td><code>system_instruction</code> 顶层</td>
-            </tr>
-            <tr>
-              <td>用户消息</td>
-              <td><code>role: "user"</code></td>
-              <td><code>role: "user"</code></td>
-              <td><code>role: "user"</code></td>
-            </tr>
-            <tr>
-              <td>助手消息</td>
-              <td><code>role: "assistant"</code></td>
-              <td><code>role: "assistant"</code></td>
-              <td><code>role: "model"</code></td>
-            </tr>
-            <tr>
-              <td>工具结果</td>
-              <td><code>role: "user"</code> + <code>type: "tool_result"</code></td>
-              <td><code>role: "tool"</code></td>
-              <td><code>role: "function"</code></td>
-            </tr>
-            <tr>
-              <td>多模态</td>
-              <td><code>content</code> 数组</td>
-              <td><code>content</code> 数组</td>
-              <td><code>parts</code> 数组</td>
-            </tr>
+            <tr><td>消息数组</td><td><code>messages</code></td><td><code>messages</code></td><td><code>contents</code></td></tr>
+            <tr><td>系统消息</td><td>顶层 <code>system</code> 字段（不在 messages 里）</td><td><code>role: "system"</code></td><td><code>system_instruction</code> 顶层字段</td></tr>
+            <tr><td>用户消息</td><td><code>role: "user"</code></td><td><code>role: "user"</code></td><td><code>role: "user"</code></td></tr>
+            <tr><td>助手消息</td><td><code>role: "assistant"</code></td><td><code>role: "assistant"</code></td><td><code>role: "model"</code></td></tr>
+            <tr><td>工具结果</td><td><code>role: "user"</code> + content 中 <code>type: "tool_result"</code></td><td><code>role: "tool"</code> + <code>tool_call_id</code></td><td><code>role: "function"</code></td></tr>
+            <tr><td>多模态内容</td><td>content 数组中的 <code>type: "image"</code> 等 block</td><td>content 数组中的 <code>type: "image_url"</code></td><td><code>parts</code> 数组，每项有一个 type</td></tr>
           </tbody>
         </table>
-        <div class="ins"><strong>核心规律：</strong>system / user / assistant 三个角色是标配。框架们（LangChain、Vercel AI SDK
-          等）都在这个模式上做抽象。</div>
+        <div class="ins"><strong>核心规律：</strong>system / user / assistant 三个角色是所有厂商的标配。框架层（LangChain、Vercel AI SDK、LlamaIndex）都在这个模式上做抽象——统一 messages 格式，适配不同 API。</div>
       </div>
 
       <div class="card">
-        <div class="sec-name">完整的 Agent 循环</div>
-        <p>从用户一句提问到最终回答，消息层面的完整流程：</p>
+        <div class="sec-name">完整的 Agent 循环：从提问到回答的消息序列</div>
+        <p>理解了消息格式，就可以拆解一个完整的 Agent 交互循环。从用户一句"帮我看看这个文件"到最终回答，消息层面经历了多轮往返：</p>
         <div class="two-col">
           <div class="col-card">
-            <div class="cc-title">Step 1：用户输入</div>
+            <div class="cc-title">Step 1：用户输入 → API 请求</div>
             <div class="dark-box">
               <div class="dr">
               POST /v1/messages
-              { 
-                "model": "claude-sonnet-4",
-                "system": "你是 Claude Code...",
+              {
+                "model": "claude-sonnet-4-20250514",
+                "system": "你是 Claude Code，一个 AI 编程助手...",
                 "messages": [
-                 {
+                  {
                     "role": "user",
-                    "content":"看一下 ResultUtils.java 的内容..."
+                    "content": "看一下 ResultUtils.java 的内容..."
                   }
                 ],
                 "tools": [
-                  {
-                    "name": "Read",
-                    "input_schema": {...}
-                  }
+                  { "name": "Read", "input_schema": {...} },
+                  { "name": "Bash", "input_schema": {...} },
+                  { "name": "LSP",  "input_schema": {...} }
                 ]
               }</div>
             </div>
-            <div class="cycle-line">↓ tool_use</div>
+            <div class="cycle-line">↓ LLM 返回 tool_use</div>
           </div>
           <div class="col-card">
-            <div class="cc-title">Step 2：LLM 决定调工具</div>
+            <div class="cc-title">Step 2：LLM 决定调用 Read</div>
             <div class="dark-box">
               <div class="dr">
               {
                 "role": "assistant",
                 "content": [
-                  { "type":"text", "text":"我先读取这个文件" },
-                  { "type":"tool_use", 
-                    "id":"call_123",
-                    "name":"Read",
-                    "input":{"file_path":"src/ResultUtils.java"} 
+                  { "type": "text", "text": "我先读取这个文件" },
+                  {
+                    "type": "tool_use",
+                    "id": "call_123",
+                    "name": "Read",
+                    "input": { "file_path": "src/ResultUtils.java" }
                   }
                 ]
               }</div>
             </div>
           </div>
         </div>
-        <div class="cycle-line">↓ tool_result 返回 → LLM 再次推理 → 继续调工具 → ... → 最终回答</div>
+        <div class="cycle-line">↓ tool_result 返回 → LLM 再次推理 → 可能继续调工具 → ... → 最终 text 回答</div>
 
-        <div class="ins">
-          <strong>完整的消息循环序列：</strong><br>
-          User → LLM: "帮我做X" &nbsp;← 初始提问<br>
-          LLM → 运行时: "调用 Read 工具" &nbsp;← tool_use<br>
-          运行时 → LLM: "Read 结果" &nbsp;← tool_result<br>
-          LLM → 运行时: "调用 LSP 工具" &nbsp;← tool_use<br>
-          运行时 → LLM: "LSP 结果" &nbsp;← tool_result<br>
-          LLM → User: "最终回答" &nbsp;← 纯 text
+        <div class="ins" style="margin-top:14px;">
+          <strong>从消息视角看完整的一次 Agent 任务：</strong><br>
+          ① User → LLM: "帮我检查代码问题" &nbsp;← 初始提问，只有一条 user message<br>
+          ② LLM → Runtime: <code>tool_use(name="Read")</code> &nbsp;← LLM 决定先读文件<br>
+          ③ Runtime → LLM: <code>tool_result(content="文件内容...")</code> &nbsp;← 把文件内容喂回去<br>
+          ④ LLM → Runtime: <code>tool_use(name="LSP", operation="diagnostics")</code> &nbsp;← LLM 读了代码后决定查 LSP<br>
+          ⑤ Runtime → LLM: <code>tool_result(content="3 errors, 1 warning...")</code> &nbsp;← 返回诊断结果<br>
+          ⑥ LLM → User: "发现 3 个问题：..." &nbsp;← 综合分析后给出最终回答
         </div>
       </div>
+
+      <div class="card">
+        <div class="sec-name">Context Window：为什么消息数组是硬约束</div>
+        <p>上述循环有一个关键前提：<strong>LLM 是无状态的 HTTP 服务</strong>——它不记得上一轮说了什么。每次 API 请求，你<strong>必须把整个消息历史完整发送</strong>：</p>
+        <div class="dark-box">
+          <div class="dt">第 N 轮请求——下面这整块都是本次 HTTP body</div>
+          <div class="dr">
+          messages: [
+            { role: "user", content: "看一下 ResultUtils..." },     ← 原始提问（第 1 轮）
+            { role: "assistant", content: [                          ← LLM 决定读文件（第 2 轮）
+              { type: "tool_use", name: "Read", ... }
+            ]},
+            { role: "user", content: [                               ← 文件内容回传（第 3 轮）
+              { type: "tool_result", content: "package com...\n..." }
+            ]},
+            { role: "assistant", content: [                          ← LLM 决定查 LSP（第 4 轮）
+              { type: "tool_use", name: "LSP", ... }
+            ]},
+            { role: "user", content: [                               ← LSP 结果回传（第 5 轮）
+              { type: "tool_result", content: "3 errors found..." }
+            ]},
+            // ↑ 以上所有消息，每次请求都要完整发送
+            // ↓ 下面是本轮新增的
+            { role: "assistant", content: "分析结果如下：..." }
+          ]</div>
+        </div>
+        <p>一次复杂任务调十几个工具、读几个大文件——messages 数组轻松塞进几万甚至几十万 token。这就是为什么 Context Window 不是"建议"而是<strong>硬约束</strong>。</p>
+
+        <details>
+          <summary>为什么 LLM API 设计成无状态的？</summary>
+          <p>这是工程权衡的结果。有状态方案（服务端记住对话历史）看似节省带宽，但带来更严重的问题：服务端需要维护海量会话状态 → 单点故障丢失所有对话 → 无法水平扩展 → 计费和速率限制变得极其复杂。</p>
+          <p>无状态方案让每一次 API 请求都是<strong>自包含的</strong>：网关可以任意路由到空闲 GPU、请求之间完全独立、失败只需重发当前请求。代价是每次都要把历史重传一遍——但这个代价换来了系统的水平扩展能力和容错性。</p>
+          <p><strong>这也是为什么 token 优化如此重要。</strong>无状态架构意味着每多一个冗余 token，不是浪费一次——是<strong>浪费每一轮</strong>。</p>
+        </details>
+      </div>
+
+      <div class="card">
+        <div class="sec-name">消息历史是 Agent 的命脉</div>
+        <p>回过头看，Agent 的能力上限不是模型有多聪明——是<strong>消息历史能装多少有效信息</strong>。tool_use 让你能做任何事，但每次调用的结果都在挤占 Context Window。Message 管理就是 Agent 优化的核心战场——下一 Tab 展开。</p>
+      </div>
+
     </div>
 
     <!-- ════════════ Tab 5: 优化 ════════════ -->
     <div class="tab-panel" id="t5">
-      <div class="card">
-        <div class="sec-name">Context Window 硬约束</div>
-        <p><strong>每次 API 请求都携带完整的 messages 数组。</strong>因为 LLM 是无状态的 HTTP 服务——你得把"已经发生了什么"全部告诉它：</p>
-        <div class="dark-box">
-          <div class="dt">每次请求都完整发送</div>
-          <div class="dr">
-          messages: [
-            { role: "user", content: "看一下 ResultUtils..." }, ← 原始提问
-            { role: "assistant", 
-              content: [
-                { type:"tool_use",... }
-              ]
-            },← LLM说"读文件"
-            { role: "user", 
-              content: [
-              { type:"tool_result",... }
-              ]
-            },← 返回内容
-            { role: "assistant",
-              content: [
-                { type:"tool_use",... }
-              ] 
-            },← LLM说"调LSP"
-            { role: "user",
-              content: [
-                { type:"tool_result",... }
-              ]
-            },← 返回结果
-            // ↑ 以上每次都完整发送
-          ]</div>
-        </div>
-        <div class="ins"><strong>这就是 Context Window 是硬约束的根本原因——</strong>一次复杂任务调十几个工具，messages 数组轻松塞进几万甚至几十万 token。</div>
-      </div>
 
       <div class="card">
-        <div class="sec-name">message 管理 = Agent 优化核心</div>
-        <p>Agent 框架的优化本质都可以归结为 <strong>message list 管理</strong>：</p>
+        <div class="sec-name">Message 管理 = Agent 优化的核心</div>
+        <p>既然每次请求都要带完整历史，<strong>怎么管理这个消息数组就成了 Agent 框架的工程天花板</strong>。四种经典策略：</p>
         <table class="mtbl">
           <thead>
-            <tr>
-              <th>优化</th>
-              <th>本质</th>
-              <th>效果</th>
-            </tr>
+            <tr><th>策略</th><th>做法</th><th>效果</th><th>代价</th></tr>
           </thead>
           <tbody>
             <tr>
               <td>上下文压缩</td>
-              <td>多轮 tool_use/tool_result 浓缩成摘要</td>
+              <td>将多轮 tool_use / tool_result 浓缩为一段摘要，替代原始消息</td>
               <td>token 从几万降到几百</td>
+              <td>细节丢失——LLM 可能漏掉关键信息</td>
             </tr>
             <tr>
               <td>滑动窗口</td>
-              <td>丢弃最早消息，保留最近 N 轮</td>
-              <td>控制总长度</td>
+              <td>丢弃最早的消息，只保留最近 N 轮</td>
+              <td>总长度可控</td>
+              <td>丢失早期上下文——Agent 可能"忘记"最初的目标</td>
             </tr>
             <tr>
               <td>关键信息提取</td>
-              <td>只保留 tool_result 的核心结论</td>
-              <td>减少噪音</td>
+              <td>从 tool_result 中只保留核心结论，丢弃原始输出</td>
+              <td>减少噪音，提升信号密度</td>
+              <td>需要准确的提取逻辑——提取错误比不提取更糟</td>
             </tr>
             <tr>
-              <td>多轮汇总</td>
-              <td>多次类似提问合并</td>
-              <td>精炼历史</td>
+              <td>分层记忆</td>
+              <td>近期消息保留完整、中期保留摘要、远期只保留关键事实</td>
+              <td>平衡细节与容量</td>
+              <td>实现复杂度最高，三层管理逻辑需要精心调优</td>
             </tr>
           </tbody>
         </table>
-        <div class="ins"><strong>Agent 框架的工程天花板就是 message 管理——</strong>既要保证 LLM 有足够上下文做对事，又不能溢出 token 上限。</div>
+        <div class="ins"><strong>没有银弹。</strong>四种策略在不同场景下各有优劣。工程上的判断标准是：<strong>当前任务需要多少历史信息才能做出正确决策？</strong>少了会出错，多了浪费 token——这就是 Agent 优化的核心矛盾。</div>
       </div>
 
       <div class="card">
-        <div class="sec-name">Prompt Caching：前缀即缓存</div>
-        <p>最后一层理解：<strong>Prompt Caching 基于前缀缓存，命中按开头算。</strong> 所以消息结构的排列有讲究：</p>
+        <div class="sec-name">Prompt Caching：前缀决定一切</div>
+        <p>除了精简 messages，还有一条完全不同的优化路线：<strong>不减少发送量，但让重复部分免费</strong>。</p>
+        <p>Anthropic 的 Prompt Caching 机制的核心原理是<strong>前缀缓存</strong>——如果两次请求的前 N 个 token 完全相同，第二次请求的前 N 个 token 直接从缓存读取，只计算新增部分。这意味着消息在请求体中的<strong>排列顺序直接决定缓存命中率</strong>：</p>
         <div class="dark-box">
-          <div class="dt">消息结构排列</div>
-          <div class="dr">请求体:
-            ├── system ← 系统提示词（不变） → ✅ 缓存命中
-            ├── tools ← 工具定义（不变） → ✅ 缓存命中
-            └── messages ← 对话历史（不断增长） → ❌ 每次都变
-            ├── user ← 原始提问
-            ├── assistant ← tool_use
-            ├── user ← tool_result
-            ├── assistant ← tool_use
-            └── user ← tool_result</div>
+          <div class="dt">请求体结构 → 缓存行为</div>
+          <div class="dr">POST /v1/messages 请求体:
+          ├── system ← 系统提示词（每轮不变）         → ✅ 总是命中缓存
+          ├── tools  ← 工具定义列表（每轮不变）        → ✅ 总是命中缓存
+          └── messages ← 对话历史（每轮新增）          → ❌ 末尾变化导致缓存断点
+              ├── user: "帮我检查代码"                ← 第 1 轮
+              ├── assistant: tool_use(Read)           ← 第 2 轮（新增，未缓存）
+              ├── user: tool_result(文件内容)          ← 第 3 轮（新增，未缓存）
+              ├── assistant: tool_use(LSP)            ← 第 4 轮（新增，未缓存）
+              └── user: tool_result(诊断结果)          ← 第 5 轮（新增，未缓存）</div>
         </div>
-        <p><strong>system 在最前面 + tools 紧随其后</strong>——只要不变，每次请求前几十 K token 直接从缓存读，只用计算末尾新增的 messages。如果 tools
-          定义每次都变，缓存就废了。</p>
-        <div class="ins"><strong>这也是为什么 Anthropic 建议</strong>把工具定义写得稳定、少用动态生成的 tools。</div>
+        <p>关键洞察：<strong>system 和 tools 必须放在 messages 前面</strong>——而且每次请求保持不变。如果 tools 定义每次动态生成，缓存就废了——前几十 K token 每次都要重新计算。</p>
+
+        <details>
+          <summary>缓存命中率的工程细节</summary>
+          <p>Prompt Caching 有几个非直觉的特性：</p>
+          <p><strong>① 最小缓存长度：</strong>Anthropic 要求缓存块至少 1024 token（Claude Sonnet）或 2048 token（Claude Opus）。太短的 system prompt 反而不值得缓存。</p>
+          <p><strong>② 缓存写入成本：</strong>写入缓存比正常推理贵——通常多 25% 的 token 计费。所以只有<strong>确定会重复使用</strong>的内容才值得写入缓存。一次性请求不应该标记缓存。</p>
+          <p><strong>③ 断点即失效：</strong>缓存基于前缀——中间插入一条消息，后面的所有缓存全部作废。这就是为什么 tools 必须放在 messages 前面且保持稳定——如果 tools 定义中间插入了一个新工具，整个 messages 数组的缓存位点都会漂移。</p>
+          <p><strong>④ 实际收益：</strong>在 Agent 场景中，system + tools 通常占 20-40K token。按 Anthropic 定价，缓存命中后这部分成本的折扣率可达 90%。对于高频 Agent 任务，这意味着<strong>每次工具调用的增量成本远低于首次请求</strong>。</p>
+          <p><strong>⑤ Claude Code 的实践：</strong>Claude Code 将 system prompt 和 tools 定义设计为固定前缀——包括工具名、描述、JSON Schema 都尽量不动态变化。这就是为什么 Claude Code 的工具定义写得非常稳定、少用动态生成的 tools：<strong>稳定 = 缓存友好 = 省钱</strong>。</p>
+        </details>
       </div>
+
+      <div class="card">
+        <div class="sec-name">缓存友好的架构设计</div>
+        <p>Prompt Caching 的原理反过来影响架构决策：</p>
+        <div class="flow-steps">
+          <div class="flow-step">
+            <div class="num">1</div>
+            <div class="fs-text"><strong>固定前缀优先：</strong>所有不变内容（system、tools、few-shot examples）放在请求体最前面，确保它们在缓存前缀范围内</div>
+          </div>
+          <div class="flow-step">
+            <div class="num">2</div>
+            <div class="fs-text"><strong>动态内容后置：</strong>新增的 user message、tool_result 只能追加在末尾——不要插入中间，避免破坏后续缓存位点</div>
+          </div>
+          <div class="flow-step">
+            <div class="num">3</div>
+            <div class="fs-text"><strong>稳定工具定义：</strong>不要每次请求动态生成 tools JSON Schema——用固定的工具配置文件，保证缓存命中</div>
+          </div>
+          <div class="flow-step">
+            <div class="num">4</div>
+            <div class="fs-text"><strong>Minimal context：</strong>只有确实会被多次调用的内容才写缓存——一次性 tool_result 不标记 cache control</div>
+          </div>
+        </div>
+        <div class="ins"><strong>一句话总结：</strong>缓存友好的架构就是让"不变的"呆在前面、让"变化的"追加到末尾、让"不确定是否复用的"别占缓存位。</div>
+      </div>
+
+      <div class="card">
+        <div class="sec-name">回到架构选择：厂商调用 vs MCP</div>
+        <p>理解了消息管理 + 缓存机制后，现在可以更完整地评估两种工具集成方案：</p>
+        <table class="mtbl">
+          <thead>
+            <tr><th></th><th>厂商原生 Tool Use</th><th>MCP</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>范围</td><td>单次 API 请求的响应格式——LLM 表达调用意图的方式</td><td>完整的应用层协议——Client 和 Server 之间的通信标准</td></tr>
+            <tr><td>标准化</td><td>各家各自设计格式（Anthropic tool_use / OpenAI tool_calls / Gemini functionCall）</td><td>公开规范，任何人可实现 MCP Server 或 Client</td></tr>
+            <tr><td>接口方</td><td>LLM API 提供商</td><td>工具开发者——与 LLM 平台解耦</td></tr>
+            <tr><td>传输</td><td>单次 HTTP 请求-响应</td><td>stdio / SSE / HTTP——长连接，支持多次调用</td></tr>
+            <tr><td>上下文模型</td><td>工具定义在每次 API 请求的 tools 数组中</td><td>工具定义通过 tools/list 返回后常驻 system prompt</td></tr>
+            <tr><td>缓存影响</td><td>tools 定义稳定则缓存命中，动态生成则缓存失效</td><td>tools 定义稳定（Server 启动时确定），缓存友好</td></tr>
+          </tbody>
+        </table>
+        <div class="ins">
+          <strong>不是替代关系，是分层关系：</strong><br>
+          厂商 Tool Use 是 LLM ↔ API 的约定（表达"我要调工具"）<br>
+          MCP 是 Runtime ↔ 工具 Server 的标准协议（执行"调哪个工具、传什么参、怎么返回"）<br>
+          两者在不同抽象层解决不同问题——Claude Code 同时使用两者：LLM 通过 Anthropic Tool Use 表达意图，Runtime 通过 MCP 与外部工具 Server 通信。
+        </div>
+      </div>
+
     </div>
 
-    <!-- ════════════ Tab 6: 总结 ════════════ -->
+    <!-- ════════════ Tab 6: 回顾 ════════════ -->
     <div class="tab-panel" id="t6">
+
       <div class="card">
-        <div class="sec-name">思维路径全景</div>
-        <p>一个问题接一个问题，从一条简单的命令调用，一路追到了 API 协议设计、缓存策略这样的系统底层思考。</p>
+        <div class="sec-name">协议栈全景</div>
+        <p>从一句 <code>/java-lsp</code> 出发，我们穿越了整个 Claude Code Agent 的技术栈。不只是"它怎么工作的"——每一步都从前一步自然追问而来：</p>
 
         <div class="path">
           <div class="path-leg">
-            <div class="path-node" style="background:var(--surface-soft);border-color:var(--primary);">
-              <div class="pn" style="color:var(--ink);">起点</div>
+            <div class="path-node highlight">
+              <div class="pn">起点</div>
               <div class="pname">/java-lsp</div>
               <div class="pmath">触发 JDT LS</div>
             </div>
@@ -1568,7 +1078,7 @@
           <div class="path-leg">
             <div class="path-node">
               <div class="pn">01</div>
-              <div class="pname">LSP 工具</div>
+              <div class="pname">LSP 翻译层</div>
               <div class="pmath">不是 shell 命令</div>
             </div>
             <div class="path-arrow"></div>
@@ -1577,7 +1087,7 @@
             <div class="path-node">
               <div class="pn">02</div>
               <div class="pname">Tool Use</div>
-              <div class="pmath">LLM → 运行时</div>
+              <div class="pmath">LLM 表达意图</div>
             </div>
             <div class="path-arrow"></div>
           </div>
@@ -1585,7 +1095,7 @@
             <div class="path-node">
               <div class="pn">03</div>
               <div class="pname">厂商格式</div>
-              <div class="pmath">事实标准</div>
+              <div class="pmath">事实标准分化</div>
             </div>
             <div class="path-arrow"></div>
           </div>
@@ -1593,7 +1103,7 @@
             <div class="path-node">
               <div class="pn">04</div>
               <div class="pname">MCP 协议</div>
-              <div class="pmath">JSON-RPC 2.0</div>
+              <div class="pmath">开放标准</div>
             </div>
             <div class="path-arrow"></div>
           </div>
@@ -1601,7 +1111,7 @@
             <div class="path-node">
               <div class="pn">05</div>
               <div class="pname">消息格式</div>
-              <div class="pmath">高度趋同</div>
+              <div class="pmath">角色与数组</div>
             </div>
             <div class="path-arrow"></div>
           </div>
@@ -1609,7 +1119,7 @@
             <div class="path-node">
               <div class="pn">06</div>
               <div class="pname">Agent 循环</div>
-              <div class="pmath">多轮 tool_use</div>
+              <div class="pmath">多轮往返</div>
             </div>
             <div class="path-arrow"></div>
           </div>
@@ -1617,7 +1127,7 @@
             <div class="path-node">
               <div class="pn">07</div>
               <div class="pname">Context</div>
-              <div class="pmath">完整历史</div>
+              <div class="pmath">无状态约束</div>
             </div>
             <div class="path-arrow"></div>
           </div>
@@ -1630,34 +1140,49 @@
             <div class="path-arrow"></div>
           </div>
           <div class="path-leg">
-            <div class="path-node" style="border-color:var(--primary);background:var(--surface-soft);">
-              <div class="pn" style="color:var(--ink);">终点</div>
-              <div class="pname" style="font-weight:600;">Prompt Cache</div>
-              <div class="pmath">system/tools 放前缀</div>
+            <div class="path-node highlight">
+              <div class="pn">终点</div>
+              <div class="pname">Prompt Cache</div>
+              <div class="pmath">前缀决定成本</div>
             </div>
           </div>
         </div>
       </div>
 
       <div class="card">
-        <div class="sec-name">关键洞察</div>
-        <div class="ins" style="margin-bottom:10px;"><strong>① LSP 是内置工具，不是 shell 命令</strong><br>LLM ↔ LSP Server
-          之间的翻译层，处理路径转 URI、行号转换</div>
-        <div class="ins" style="margin-bottom:10px;"><strong>② Tool Use 是业界共识</strong><br>各家格式不同但底层逻辑完全一致：LLM 输出结构化 JSON
-          → 运行时识别并执行</div>
-        <div class="ins" style="margin-bottom:10px;"><strong>③ MCP 是真正的开放标准</strong><br>tool_use 是 LLM↔API 的约定，MCP 是
-          Claude Code↔外部工具 Server 的标准协议</div>
-        <div class="ins" style="margin-bottom:10px;"><strong>④ Agent 优化的核心 = message 管理</strong><br>每一次
-          tool_use/tool_result 都在消耗 Context Window，压缩与管理决定工程天花板</div>
-        <div class="ins"><strong>⑤ 前缀缓存决定架构</strong><br>system/tools 在最前面且保持稳定，才能命中 Prompt Cache</div>
+        <div class="sec-name">五个核心结论</div>
+
+        <div class="ins" style="margin-bottom:10px;">
+          <strong>① 工具调用的本质是结构化 JSON，不是 shell 命令</strong><br>
+          LLM 输出 <code>type: "tool_use"</code> 的 JSON block → Runtime 识别、路由、执行 → 结果包装成 <code>tool_result</code> 回传。<code>Read</code>、<code>Bash</code>、<code>LSP</code> 在 LLM 眼里只是 <code>name</code> 不同——底层机制完全一样。
+        </div>
+
+        <div class="ins" style="margin-bottom:10px;">
+          <strong>② 厂商格式趋同但不统一——MCP 补上了标准化这一环</strong><br>
+          Anthropic 的 <code>tool_use</code>、OpenAI 的 <code>tool_calls</code>、Gemini 的 <code>functionCall</code> 都表达同一件事，只是字段名和嵌套结构不同。MCP 在更高的抽象层（Runtime ↔ 工具 Server）提供了统一的 JSON-RPC 2.0 协议——一次实现，跨平台使用。
+        </div>
+
+        <div class="ins" style="margin-bottom:10px;">
+          <strong>③ Agent 循环的工程上限 = messages 数组管理</strong><br>
+          每次 API 请求携带完整消息历史——LLM 不记得上一轮说了什么。tool_use / tool_result 每多一轮，messages 就胖一圈。Context Window 不是建议，是物理定律。
+        </div>
+
+        <div class="ins" style="margin-bottom:10px;">
+          <strong>④ Prompt Caching 靠前缀——架构设计要主动适配</strong><br>
+          缓存命中按开头算。system + tools 放在请求体最前面且保持稳定 → 每次请求前几十 K token 直接从缓存读取。动态 tools 定义、中间插入消息 → 缓存失效。架构的稳定性 = 缓存的命中率 = 成本。
+        </div>
+
+        <div class="ins">
+          <strong>⑤ MCP 和 Skill 不是竞争关系——是频率分层</strong><br>
+          MCP 适合高频核心工具（稳定、通用、值得占上下文），Skill/CLI 适合偶发复杂工作流（按需触发、不调用零成本）。分界线是：<strong>这个工具在多高比例的对话中会被用到？</strong>
+        </div>
       </div>
+
     </div>
 
   </div>
 
-  <!-- ═══ JS ═══ -->
   <script>
-    // 剥离代码块的多余 HTML 缩进
     (function() {
       document.querySelectorAll('.dark-box .dr').forEach(function(el) {
         var html = el.innerHTML;
@@ -1666,10 +1191,7 @@
         var base = null;
         for (var i = 0; i < lines.length; i++) {
           var t = lines[i].trim();
-          if (t.length > 0) {
-            base = lines[i].length - t.length;
-            break;
-          }
+          if (t.length > 0) { base = lines[i].length - t.length; break; }
         }
         if (!base || base === 0) return;
         el.innerHTML = lines.map(function(l) { return l.slice(base); }).join('\n').trim();
