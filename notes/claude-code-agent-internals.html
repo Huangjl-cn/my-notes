@@ -390,7 +390,7 @@
 
   <div class="hero">
     <h1>Claude Code Agent 协议栈</h1>
-    <div class="sub">从一句 <code>/java-lsp</code> 出发，逐层拆解工具调用、MCP 协议、消息循环与 Context 优化</div>
+    <div class="sub">一次 <code>/java-lsp</code> 调试，引出了对工具调用、MCP 协议、消息循环与 Context 优化的完整探索</div>
     <div class="rule"></div>
   </div>
 
@@ -417,7 +417,7 @@
         <div class="sec-name">一条命令引发的追问</div>
         <p>在聊天框输入 <code>/java-lsp</code>，Claude Code 对 Java 文件执行了 <code>LSP hover</code>，返回了 diagnostics。但项目明明加了 Lombok，为什么 getter 方法的错误赫然在列？</p>
         <p>检查 <code>.lsp.json</code> 发现 Lombok agent 的 <code>-javaagent</code> 参数已配置——只是 JDT LS 初始化需要时间。二次重试后，Lombok 生成的 getter 被正确解析，一切恢复正常。</p>
-        <p>一个正常的工具使用流程结束了。但这次排查留下了一个更大的问题：<strong><code>LSP({...})</code> 到底是怎么工作的？</strong>它看起来像一个函数调用——但谁在执行它？参数怎么传过去的？和 <code>Read({...})</code>、<code>Bash({...})</code> 这些工具是同一类东西吗？</p>
+        <p>一个正常的工具使用流程结束了。但这次排查突然引发了我的思考：<strong><code>LSP({...})</code> 到底是怎么工作的？</strong>它看起来像一个函数调用——但谁在执行它？参数怎么传过去的？和 <code>Read({...})</code>、<code>Bash({...})</code> 这些工具是同一类东西吗？</p>
       </div>
 
       <div class="card">
@@ -445,8 +445,8 @@
       </div>
 
       <div class="card">
-        <div class="sec-name">这篇文章要回答的问题</div>
-        <p>从 <code>/java-lsp</code> 出发，我们将逐层拆开整个 Agent 协议栈：</p>
+        <div class="sec-name">探索路径</div>
+        <p>从 <code>/java-lsp</code> 出发，一趟下来穿过了这些层次：</p>
         <div class="flow-steps">
           <div class="flow-step">
             <div class="num">1</div>
@@ -469,7 +469,6 @@
             <div class="fs-text"><strong>Context 为什么是硬通货？</strong>→ message 管理与 Prompt Caching 的工程取舍</div>
           </div>
         </div>
-        <p>这不是百科全书式的罗列——每一步都从前一步<strong>自然追问</strong>而来。</p>
       </div>
 
     </div>
@@ -479,10 +478,10 @@
 
       <div class="card">
         <div class="sec-name">LSP 调用的底层映射</div>
-        <p>先从看得见的地方入手。<code>LSP({...})</code> 是 LLM ↔ LSP Server 之间的高层封装，参数会被翻译成标准 JSON-RPC 请求：</p>
+        <p><code>LSP({...})</code> 是 LLM ↔ LSP Server 之间的高层封装，参数会被翻译成标准 JSON-RPC 请求：</p>
         <div class="two-col">
           <div class="col-card">
-            <div class="cc-title">你写的调用</div>
+            <div class="cc-title">工具调用写法</div>
             <div class="dark-box">
               <div class="dr">
                 LSP({
@@ -515,12 +514,12 @@
           </div>
         </div>
         <p>这个翻译层做了三件事：<strong>路径转 URI</strong>（Windows 盘符 → <code>file:///</code> 格式）、<strong>行号 0-based 转换</strong>（编辑器行号从 1 开始，LSP 协议从 0 开始）、<strong>方法名映射</strong>（<code>hover</code> → <code>textDocument/hover</code>）。</p>
-        <div class="ins"><strong>关键认知：</strong><code>LSP</code> 不是 shell 命令——它是翻译层。LLM 不需要知道 LSP 协议的细节，它只需要表达"我要 hover 第 49 行"的意图。</div>
+        <div class="ins"><code>LSP</code> 不是 shell 命令——它是翻译层。LLM 不需要知道 LSP 协议的细节，它只需要表达"我要 hover 第 49 行"的意图。</div>
       </div>
 
       <div class="card">
         <div class="sec-name">Tool Use：LLM 如何表达调用意图</div>
-        <p>翻译层解决的是"怎么执行"，但在这之前还有一个更基础的问题：<strong>LLM 怎么表达"我想调工具"？</strong></p>
+        <p>翻译层解决的是"怎么执行"，但在此之前还有一个更基础的问题：<strong>LLM 怎么表达"我想调工具"？</strong></p>
         <p>这不是靠字符串模式匹配。Claude Code 使用的是 <strong>Anthropic Messages API 的原生 Tool Use 能力</strong>——LLM 直接返回结构化 JSON，其中内嵌 <code>type: "tool_use"</code> 标记：</p>
         <div class="dark-box">
           <div class="dt">LLM 返回消息（简化的 content block）</div>
@@ -540,12 +539,12 @@
             ]
           }</div>
         </div>
-        <p>注意 <code>content</code> 是一个数组——同一条 assistant 消息里可以同时包含文本解释和工具调用。LLM 可以边说话边动手。</p>
+        <p><code>content</code> 是一个数组——同一条 assistant 消息里可以同时包含文本解释和工具调用。LLM 可以边说话边动手。</p>
       </div>
 
       <div class="card">
         <div class="sec-name">执行四步：从 LLM 决定到结果回传</div>
-        <p>Claude Code 运行时收到 <code>type: "tool_use"</code> 后的完整流程：</p>
+        <p>Claude Code 运行时收到 <code>type: "tool_use"</code> 后的处理流程：</p>
         <div class="flow-steps">
           <div class="flow-step">
             <div class="num">1</div>
@@ -564,7 +563,7 @@
             <div class="fs-text"><strong>回传</strong> — 将执行结果包装成 <code>type: "tool_result"</code>，以 <code>role: "user"</code> 的身份追加到消息列表末尾，喂回 LLM 做下一轮推理</div>
           </div>
         </div>
-        <div class="ins"><strong>核心认知：</strong><code>LSP({...})</code> 和 <code>Read({...})</code>、<code>Bash({...})</code> 在 LLM 眼里<strong>没有本质区别</strong>——都是 Tool Use 机制下的一个 <code>name</code>。工具实现可以千差万别，但 LLM 只看到统一的结构化调用接口。</div>
+        <div class="ins"><code>LSP({...})</code> 和 <code>Read({...})</code>、<code>Bash({...})</code> 在 LLM 眼里<strong>没有本质区别</strong>——都是 Tool Use 机制下的一个 <code>name</code>。工具实现可以千差万别，但 LLM 只看到统一的结构化调用接口。</div>
       </div>
 
       <div class="card">
@@ -582,7 +581,7 @@
             <tr><td>并行调用</td><td>content 数组中多个 tool_use</td><td>tool_calls 数组中多项</td><td>parts 中多个 functionCall</td></tr>
           </tbody>
         </table>
-        <div class="ins"><strong>底层逻辑完全一致，但字段名、嵌套结构、参数编码方式各不相同。</strong>这意味着如果你直接对接各家 API，需要为每个厂商写一套解析逻辑。</div>
+        <div class="ins"><strong>底层逻辑完全一致，但字段名、嵌套结构、参数编码方式各不相同。</strong>直接对接各家 API 的话，需要为每个厂商写一套解析逻辑。</div>
 
         <details>
           <summary>为什么没有统一标准？</summary>
@@ -593,8 +592,8 @@
       </div>
 
       <div class="card">
-        <div class="sec-name">所以 Tool Use 不是什么黑魔法</div>
-        <p>抛开所有术语，Tool Use 的本质就是三步：</p>
+        <div class="sec-name">Tool Use 的本质</div>
+        <p>抛开所有术语，Tool Use 就是三步：</p>
         <div class="three-col">
           <div class="col">
             <div class="cl">LLM</div>
@@ -609,7 +608,7 @@
             <div class="cd">结果追加到消息历史，LLM 再次推理——可能继续调工具，也可能给出最终回答</div>
           </div>
         </div>
-        <p>这个循环的工程上限，就是消息历史的管理能力——那是 Tab 4 和 Tab 5 要讨论的问题。在此之前，先看一个关键进展：<strong>MCP 如何把厂商私有格式变成了开放标准</strong>。</p>
+        <p>这个循环的工程上限，就是消息历史的管理能力——后面再展开。先看一个关键进展：<strong>MCP 如何把厂商私有格式变成了开放标准</strong>。</p>
       </div>
 
     </div>
@@ -619,7 +618,7 @@
 
       <div class="card">
         <div class="sec-name">MCP：给工具通信定一个开放标准</div>
-        <p><strong>Model Context Protocol (MCP)</strong> 是 Anthropic 主导的开放协议。它的设计动机很直接：上一 Tab 我们看到 Tool Use 在各家 API 里的格式各不相同——MCP 要解决的就是<strong>工具实现方和 LLM 平台方的解耦问题</strong>。</p>
+        <p><strong>Model Context Protocol (MCP)</strong> 是 Anthropic 主导的开放协议。设计动机很直接：Tool Use 在各家 API 里的格式各不相同——MCP 要解决的是<strong>工具实现方和 LLM 平台方的解耦问题</strong>。</p>
         <p>MCP 选择了 <strong>JSON-RPC 2.0</strong> 作为消息信封——这是一个成熟、简单、语言无关的远程调用协议：</p>
         <div class="dark-box">
           <div class="dt">MCP 消息基础（所有消息都套在这个外壳里）</div>
@@ -650,7 +649,7 @@
           <div class="cmp-s flex">
             <div class="st">自由空间（完全由实现方决定）</div>
             <ul>
-              <li><strong>工具名与描述：</strong><code>name</code> 和 <code>description</code> 是你定义的——LLM 靠 <code>description</code> 理解何时使用</li>
+              <li><strong>工具名与描述：</strong><code>name</code> 和 <code>description</code> 由实现方定义——LLM 靠 <code>description</code> 理解何时使用</li>
               <li><strong>参数结构：</strong><code>inputSchema</code> 里的 <code>properties</code>、<code>required</code> 完全是领域逻辑</li>
               <li><strong>传输层：</strong>stdio（子进程）、SSE（推送）、HTTP 任选，协议层不依赖传输</li>
               <li><strong>扩展能力：</strong>除 tools 外，可选实现 resources（暴露数据）、prompts（预置提示模板）、sampling（服务端发起 LLM 请求）</li>
@@ -658,7 +657,7 @@
             </ul>
           </div>
         </div>
-        <div class="ins"><strong>一句话：</strong>MCP 规定了消息怎么封包、怎么路由，但"工具有什么能力、参数长什么样、数据怎么处理"是你的事。框架统一，内容自由。</div>
+        <div class="ins">MCP 规定了消息怎么封包、怎么路由，但"工具有什么能力、参数长什么样、数据怎么处理"是实现方的事。框架统一，内容自由。</div>
       </div>
 
       <div class="card">
@@ -754,7 +753,6 @@
           }</div>
         </div>
         <div class="ins">
-          <strong>记住三条：</strong><br>
           ① 请求用 <code>method</code> + <code>params</code> 表达"调哪个工具、传什么参"<br>
           ② 响应用 <code>result.content</code> 数组返回执行结果，<code>result.isError</code> 标记工具自身异常<br>
           ③ 最外层的 <code>jsonrpc</code> + <code>id</code> 是 JSON-RPC 2.0 协议外壳——<strong>每条消息都必须有</strong>
@@ -786,7 +784,7 @@
         </div>
 
         <details>
-          <summary>MCP vs Skill/CLI：上下文经济学的两种路线</summary>
+          <summary>MCP vs Skill/CLI：上下文成本的两种路线</summary>
           <p>MCP 和 Claude Code Skill 代表了工具集成的两种根本策略：</p>
           <table class="mtbl">
             <thead><tr><th>维度</th><th>MCP Server</th><th>Skill / CLI 工具</th></tr></thead>
@@ -798,7 +796,7 @@
               <tr><td>工具数量上限</td><td>受 context window 约束，建议 &lt; 50 个</td><td>理论上无限，只有调用的才占用 token</td></tr>
             </tbody>
           </table>
-          <p><strong>结论不是二选一。</strong>高频核心工具放 MCP（稳定、通用、值得占用上下文），偶发复杂工作流用 Skill/CLI 按需触发（不调用就不花钱）。工程上的判断标准是：<strong>这个工具在多少比例的对话中会被用到？</strong></p>
+          <p>MCP 和 Skill/CLI 不是二选一的问题。高频核心工具放 MCP（稳定、通用、值得占用上下文），偶发复杂工作流用 Skill/CLI 按需触发（不调用就不花钱）。判断标准很简单：<strong>这个工具在多高比例的对话中会被用到？</strong></p>
         </details>
       </div>
 
@@ -836,12 +834,12 @@
             <tr><td>多模态内容</td><td>content 数组中的 <code>type: "image"</code> 等 block</td><td>content 数组中的 <code>type: "image_url"</code></td><td><code>parts</code> 数组，每项有一个 type</td></tr>
           </tbody>
         </table>
-        <div class="ins"><strong>核心规律：</strong>system / user / assistant 三个角色是所有厂商的标配。框架层（LangChain、Vercel AI SDK、LlamaIndex）都在这个模式上做抽象——统一 messages 格式，适配不同 API。</div>
+        <div class="ins">system / user / assistant 三个角色是所有厂商的标配。框架层（LangChain、Vercel AI SDK、LlamaIndex）都在这个模式上做抽象——统一 messages 格式，适配不同 API。</div>
       </div>
 
       <div class="card">
         <div class="sec-name">完整的 Agent 循环：从提问到回答的消息序列</div>
-        <p>理解了消息格式，就可以拆解一个完整的 Agent 交互循环。从用户一句"帮我看看这个文件"到最终回答，消息层面经历了多轮往返：</p>
+        <p>消息格式清楚了，接着看一个完整的 Agent 交互循环。从用户一句"帮我看看这个文件"到最终回答，消息层面经历了多轮往返：</p>
         <div class="two-col">
           <div class="col-card">
             <div class="cc-title">Step 1：用户输入 → API 请求</div>
@@ -900,7 +898,7 @@
 
       <div class="card">
         <div class="sec-name">Context Window：为什么消息数组是硬约束</div>
-        <p>上述循环有一个关键前提：<strong>LLM 是无状态的 HTTP 服务</strong>——它不记得上一轮说了什么。每次 API 请求，你<strong>必须把整个消息历史完整发送</strong>：</p>
+        <p>这个循环有一个关键前提：<strong>LLM 是无状态的 HTTP 服务</strong>——它不记得上一轮说了什么。每次 API 请求，<strong>必须把整个消息历史完整发送</strong>：</p>
         <div class="dark-box">
           <div class="dt">第 N 轮请求——下面这整块都是本次 HTTP body</div>
           <div class="dr">
@@ -923,19 +921,19 @@
             { role: "assistant", content: "分析结果如下：..." }
           ]</div>
         </div>
-        <p>一次复杂任务调十几个工具、读几个大文件——messages 数组轻松塞进几万甚至几十万 token。这就是为什么 Context Window 不是"建议"而是<strong>硬约束</strong>。</p>
+        <p>一次复杂任务调十几个工具、读几个大文件——messages 数组轻松塞进几万甚至几十万 token。Context Window 不是"建议"，是<strong>硬约束</strong>。</p>
 
         <details>
           <summary>为什么 LLM API 设计成无状态的？</summary>
           <p>这是工程权衡的结果。有状态方案（服务端记住对话历史）看似节省带宽，但带来更严重的问题：服务端需要维护海量会话状态 → 单点故障丢失所有对话 → 无法水平扩展 → 计费和速率限制变得极其复杂。</p>
           <p>无状态方案让每一次 API 请求都是<strong>自包含的</strong>：网关可以任意路由到空闲 GPU、请求之间完全独立、失败只需重发当前请求。代价是每次都要把历史重传一遍——但这个代价换来了系统的水平扩展能力和容错性。</p>
-          <p><strong>这也是为什么 token 优化如此重要。</strong>无状态架构意味着每多一个冗余 token，不是浪费一次——是<strong>浪费每一轮</strong>。</p>
+          <p><strong>token 优化的重要性正源于此。</strong>无状态架构意味着每多一个冗余 token，不是浪费一次——是<strong>浪费每一轮</strong>。</p>
         </details>
       </div>
 
       <div class="card">
         <div class="sec-name">消息历史是 Agent 的命脉</div>
-        <p>回过头看，Agent 的能力上限不是模型有多聪明——是<strong>消息历史能装多少有效信息</strong>。tool_use 让你能做任何事，但每次调用的结果都在挤占 Context Window。Message 管理就是 Agent 优化的核心战场——下一 Tab 展开。</p>
+        <p>回过头看，Agent 的能力上限不是模型有多聪明——是<strong>消息历史能装多少有效信息</strong>。tool_use 可以做任何事，但每次调用的结果都在挤占 Context Window。Message 管理就是 Agent 优化的核心战场。</p>
       </div>
 
     </div>
@@ -945,7 +943,7 @@
 
       <div class="card">
         <div class="sec-name">Message 管理 = Agent 优化的核心</div>
-        <p>既然每次请求都要带完整历史，<strong>怎么管理这个消息数组就成了 Agent 框架的工程天花板</strong>。四种经典策略：</p>
+        <p>每次请求都要带完整历史，<strong>怎么管理这个消息数组就成了 Agent 框架的工程天花板</strong>。四种经典策略：</p>
         <table class="mtbl">
           <thead>
             <tr><th>策略</th><th>做法</th><th>效果</th><th>代价</th></tr>
@@ -977,12 +975,12 @@
             </tr>
           </tbody>
         </table>
-        <div class="ins"><strong>没有银弹。</strong>四种策略在不同场景下各有优劣。工程上的判断标准是：<strong>当前任务需要多少历史信息才能做出正确决策？</strong>少了会出错，多了浪费 token——这就是 Agent 优化的核心矛盾。</div>
+        <div class="ins">四种策略在不同场景下各有优劣，没有哪种能通吃所有情况。工程上的判断标准是：<strong>当前任务需要多少历史信息才能做出正确决策？</strong>少了会出错，多了浪费 token——这就是 Agent 优化的核心矛盾。</div>
       </div>
 
       <div class="card">
         <div class="sec-name">Prompt Caching：前缀决定一切</div>
-        <p>除了精简 messages，还有一条完全不同的优化路线：<strong>不减少发送量，但让重复部分免费</strong>。</p>
+        <p>除了精简 messages，另一条路线思路完全不同：<strong>不减少发送量，但让重复部分免费</strong>。</p>
         <p>Anthropic 的 Prompt Caching 机制的核心原理是<strong>前缀缓存</strong>——如果两次请求的前 N 个 token 完全相同，第二次请求的前 N 个 token 直接从缓存读取，只计算新增部分。这意味着消息在请求体中的<strong>排列顺序直接决定缓存命中率</strong>：</p>
         <div class="dark-box">
           <div class="dt">请求体结构 → 缓存行为</div>
@@ -996,16 +994,16 @@
               ├── assistant: tool_use(LSP)            ← 第 4 轮（新增，未缓存）
               └── user: tool_result(诊断结果)          ← 第 5 轮（新增，未缓存）</div>
         </div>
-        <p>关键洞察：<strong>system 和 tools 必须放在 messages 前面</strong>——而且每次请求保持不变。如果 tools 定义每次动态生成，缓存就废了——前几十 K token 每次都要重新计算。</p>
+        <p>关键点：<strong>system 和 tools 必须放在 messages 前面</strong>——而且每次请求保持不变。如果 tools 定义每次动态生成，缓存就废了——前几十 K token 每次都要重新计算。</p>
 
         <details>
           <summary>缓存命中率的工程细节</summary>
           <p>Prompt Caching 有几个非直觉的特性：</p>
           <p><strong>① 最小缓存长度：</strong>Anthropic 要求缓存块至少 1024 token（Claude Sonnet）或 2048 token（Claude Opus）。太短的 system prompt 反而不值得缓存。</p>
           <p><strong>② 缓存写入成本：</strong>写入缓存比正常推理贵——通常多 25% 的 token 计费。所以只有<strong>确定会重复使用</strong>的内容才值得写入缓存。一次性请求不应该标记缓存。</p>
-          <p><strong>③ 断点即失效：</strong>缓存基于前缀——中间插入一条消息，后面的所有缓存全部作废。这就是为什么 tools 必须放在 messages 前面且保持稳定——如果 tools 定义中间插入了一个新工具，整个 messages 数组的缓存位点都会漂移。</p>
+          <p><strong>③ 断点即失效：</strong>缓存基于前缀——中间插入一条消息，后面的所有缓存全部作废。所以 tools 必须放在 messages 前面且保持稳定——如果 tools 定义中间插入了一个新工具，整个 messages 数组的缓存位点都会漂移。</p>
           <p><strong>④ 实际收益：</strong>在 Agent 场景中，system + tools 通常占 20-40K token。按 Anthropic 定价，缓存命中后这部分成本的折扣率可达 90%。对于高频 Agent 任务，这意味着<strong>每次工具调用的增量成本远低于首次请求</strong>。</p>
-          <p><strong>⑤ Claude Code 的实践：</strong>Claude Code 将 system prompt 和 tools 定义设计为固定前缀——包括工具名、描述、JSON Schema 都尽量不动态变化。这就是为什么 Claude Code 的工具定义写得非常稳定、少用动态生成的 tools：<strong>稳定 = 缓存友好 = 省钱</strong>。</p>
+          <p><strong>⑤ Claude Code 的实践：</strong>Claude Code 将 system prompt 和 tools 定义设计为固定前缀——包括工具名、描述、JSON Schema 都尽量不动态变化。这也解释了为什么 Claude Code 的工具定义非常稳定、很少动态生成 tools：<strong>稳定 = 缓存友好 = 省钱</strong>。</p>
         </details>
       </div>
 
@@ -1030,7 +1028,7 @@
             <div class="fs-text"><strong>Minimal context：</strong>只有确实会被多次调用的内容才写缓存——一次性 tool_result 不标记 cache control</div>
           </div>
         </div>
-        <div class="ins"><strong>一句话总结：</strong>缓存友好的架构就是让"不变的"呆在前面、让"变化的"追加到末尾、让"不确定是否复用的"别占缓存位。</div>
+        <div class="ins">缓存友好的架构就是让"不变的"呆在前面、让"变化的"追加到末尾、让"不确定是否复用的"别占缓存位。</div>
       </div>
 
       <div class="card">
@@ -1053,7 +1051,7 @@
           <strong>不是替代关系，是分层关系：</strong><br>
           厂商 Tool Use 是 LLM ↔ API 的约定（表达"我要调工具"）<br>
           MCP 是 Runtime ↔ 工具 Server 的标准协议（执行"调哪个工具、传什么参、怎么返回"）<br>
-          两者在不同抽象层解决不同问题——Claude Code 同时使用两者：LLM 通过 Anthropic Tool Use 表达意图，Runtime 通过 MCP 与外部工具 Server 通信。
+          两者在不同抽象层解决不同问题——Claude Code 里这两层同时存在：LLM 通过 Anthropic Tool Use 表达意图，Runtime 通过 MCP 与外部工具 Server 通信。
         </div>
       </div>
 
@@ -1064,7 +1062,7 @@
 
       <div class="card">
         <div class="sec-name">协议栈全景</div>
-        <p>从一句 <code>/java-lsp</code> 出发，我们穿越了整个 Claude Code Agent 的技术栈。不只是"它怎么工作的"——每一步都从前一步自然追问而来：</p>
+        <p>从一句 <code>/java-lsp</code> 出发，把整个 Claude Code Agent 的技术栈完整走了一遍。每一步都从前一层自然引出：</p>
 
         <div class="path">
           <div class="path-leg">
@@ -1150,7 +1148,7 @@
       </div>
 
       <div class="card">
-        <div class="sec-name">五个核心结论</div>
+        <div class="sec-name">几条核心结论</div>
 
         <div class="ins" style="margin-bottom:10px;">
           <strong>① 工具调用的本质是结构化 JSON，不是 shell 命令</strong><br>
