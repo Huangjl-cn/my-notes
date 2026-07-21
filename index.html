@@ -375,8 +375,8 @@
       background: var(--surface-card);
     }
 
-    /* ── Date Badge ── */
-    .date {
+    /* ── Hits Badge ── */
+    .hits {
       position: absolute;
       left: 18px;
       bottom: 18px;
@@ -395,12 +395,20 @@
       text-transform: uppercase;
     }
 
-    .date .label {
+    .hits .label {
       font-family: 'JetBrains Mono', ui-monospace, monospace;
       font-size: 10px;
-      font-weight: 400;
+      font-weight: 500;
       color: var(--ink);
       letter-spacing: 0.7px;
+    }
+
+    .hits .unit {
+      font-family: var(--font-body);
+      font-size: 9px;
+      font-weight: 400;
+      color: var(--muted-soft);
+      letter-spacing: 0.3px;
     }
 
     /* ── Pagination ── */
@@ -566,7 +574,7 @@
         right: auto;
       }
 
-      .date {
+      .hits {
         left: 14px;
         bottom: 14px;
         top: auto;
@@ -655,16 +663,39 @@
         a.href = n.href;
         a.style.animation = 'fadeSlideUp .42s ease-out both';
         a.style.animationDelay = (i * .08) + 's';
+        var slug = n.href.replace('notes/', '').replace('.html', '');
         a.innerHTML =
           '<div class="thumb" style="background-image:url(\'' + n.img + '\')">' +
             '<div class="category">' + n.cat + '</div>' +
-            '<div class="date"><span class="label">' + n.date + '</span></div>' +
+            '<div class="hits"><span class="label">—</span><span class="unit"> clicks</span></div>' +
           '</div>' +
           '<div class="body">' +
             '<div class="title">' + n.title + '</div>' +
             '<div class="desc">' + n.desc + '</div>' +
           '</div>' +
           '<div class="arrow">&rarr;</div>';
+
+        var label = a.querySelector('.hits .label');
+
+        // 获取点击数
+        fetch('https://counter-x-api.vercel.app/api/get/hjl-2005.github.io/' + slug)
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data && data.result && typeof data.result.value === 'number') {
+              label.textContent = data.result.value;
+            } else {
+              label.textContent = '0';
+            }
+          })
+          .catch(function() {
+            label.textContent = '—';
+          });
+
+        // 点击时 +1
+        a.addEventListener('click', function() {
+          fetch('https://counter-x-api.vercel.app/api/hit/hjl-2005.github.io/' + slug, { keepalive: true });
+        });
+
         return a;
       }
 
