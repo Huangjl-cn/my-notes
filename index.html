@@ -663,6 +663,8 @@
         a.href = n.href;
         a.style.animation = 'fadeSlideUp .42s ease-out both';
         a.style.animationDelay = (i * .08) + 's';
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
         var slug = n.href.replace('notes/', '').replace('.html', '');
         a.innerHTML =
           '<div class="thumb" style="background-image:url(\'' + n.img + '\')">' +
