@@ -71,6 +71,10 @@
       from { opacity: 0; transform: translateY(12px); }
       to   { opacity: 1; transform: translateY(0); }
     }
+    @keyframes details-reveal {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
 
     /* ── Topbar ── */
     .topbar {
@@ -82,8 +86,9 @@
       border-bottom: 1px solid rgba(62,50,40,.10);
       font-size: 13px;
     }
-    .topbar .back { color: var(--muted); text-decoration: none; font-weight: 500; }
+    .topbar .back { color: var(--muted); text-decoration: none; font-weight: 500; transition: color .2s, opacity .15s, transform .15s; }
     .topbar .back:hover { color: var(--primary); }
+    .topbar .back:active { opacity: 0.7; transform: scale(0.97); }
     .topbar .sep { width: 1px; height: 14px; background: var(--hairline); }
     .topbar .tag {
       color: var(--muted-soft);
@@ -96,6 +101,7 @@
       position: relative; z-index: 1;
       max-width: 1320px; margin: 0 auto;
       padding: 58px 28px 34px; text-align: center;
+      animation: fadeSlideUp 0.5s ease-out both;
     }
     .hero h1 {
       max-width: 820px; margin: 0 auto 22px;
@@ -338,11 +344,12 @@
     }
     details > summary::-webkit-details-marker { display: none; }
     details > summary::before {
-      content: '▸ '; display: inline-block; width: 16px;
-      color: var(--primary); transition: transform .2s;
+      content: '▸'; display: inline-block; width: 16px;
+      color: var(--primary); transition: transform .2s ease;
     }
-    details[open] > summary::before { content: '▾ '; }
+    details[open] > summary::before { transform: rotate(90deg); }
     details[open] > summary { margin-bottom: 10px; }
+    details[open] > :not(summary) { animation: details-reveal .25s ease-out both; }
     details .dark-box, details .mtbl, details blockquote { margin: 10px 0; }
     details p { font-size: 13px; color: var(--muted); line-height: 1.65; margin-bottom: 8px; }
 

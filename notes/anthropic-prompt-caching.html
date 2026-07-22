@@ -106,11 +106,16 @@
       color: var(--muted);
       text-decoration: none;
       font-weight: 500;
-      transition: color 0.2s;
+      transition: color 0.2s, opacity 0.15s, transform 0.15s;
     }
 
     .topbar .back:hover {
       color: var(--primary);
+    }
+
+    .topbar .back:active {
+      opacity: 0.7;
+      transform: scale(0.97);
     }
 
     .topbar .sep {
@@ -136,6 +141,7 @@
       margin: 0 auto;
       padding: 64px 24px 28px;
       text-align: center;
+      animation: fadeSlideUp 0.5s ease-out both;
     }
 
     .hero h1 {
@@ -1488,15 +1494,15 @@
 
   <!-- ── Tab Navigation ── -->
   <div class="tabs-wrap">
-    <button class="tab-btn active" data-t="t1">抓包发现</button>
+    <button type="button" class="tab-btn active" data-t="t1">抓包发现</button>
     <span class="tab-arrow">&rarr;</span>
-    <button class="tab-btn" data-t="t2">处理顺序与级联</button>
+    <button type="button" class="tab-btn" data-t="t2">处理顺序与级联</button>
     <span class="tab-arrow">&rarr;</span>
-    <button class="tab-btn" data-t="t3">前缀累积哈希</button>
+    <button type="button" class="tab-btn" data-t="t3">前缀累积哈希</button>
     <span class="tab-arrow">&rarr;</span>
-    <button class="tab-btn" data-t="t4">20-block 回溯</button>
+    <button type="button" class="tab-btn" data-t="t4">20-block 回溯</button>
     <span class="tab-arrow">&rarr;</span>
-    <button class="tab-btn" data-t="t5">总结</button>
+    <button type="button" class="tab-btn" data-t="t5">总结</button>
   </div>
 
   <!-- ── Content ── -->
@@ -1510,7 +1516,7 @@
         <p style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:18px;">
           用抓包工具看一眼 Claude Code 发给 Anthropic API 的请求体，<span class="ic">cache_control</span> 这个字段出现了<strong
             style="color:var(--ink);">三次</strong>——分别在 system prompt 的两块内容和最后一条 assistant 回复的末尾。<a class="doc-link"
-            href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching" target="_blank">官方文档 &nearr;</a>
+            href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching" target="_blank" rel="noopener noreferrer">官方文档 &nearr;</a>
         </p>
 
         <p style="margin-bottom:14px;">
@@ -1607,7 +1613,7 @@
           HTTP 请求体是一个 JSON 对象，字段在序列化层面没有顺序。但 Anthropic API 在组装 prompt 前缀时，有一个<strong
             style="color:var(--ink);">固定的处理顺序</strong>，不管 JSON 里各字段怎么排列。<a class="doc-link"
             href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#how-prompt-caching-works"
-            target="_blank">文档 &nearr;</a>
+            target="_blank" rel="noopener noreferrer">文档 &nearr;</a>
         </p>
 
         <div class="prompt-bar-wrap">
@@ -1661,7 +1667,7 @@
         <p style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:14px;">
           前缀匹配的逻辑：<strong style="color:var(--ink);">前面一变，后面全废</strong>，哪怕后面的内容一模一样。<a class="doc-link"
             href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#structuring-your-prompt"
-            target="_blank">文档 &nearr;</a>
+            target="_blank" rel="noopener noreferrer">文档 &nearr;</a>
         </p>
 
         <table class="mtbl">
@@ -1740,7 +1746,7 @@
             style="color:var(--ink);">三段独立的缓存条目</strong>。实际上每个断点存的是<strong style="color:var(--ink);">从 prompt
             开头到断点为止的完整前缀哈希</strong>。<a class="doc-link"
             href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#explicit-cache-breakpoints"
-            target="_blank">文档 &nearr;</a>
+            target="_blank" rel="noopener noreferrer">文档 &nearr;</a>
         </p>
 
         <div class="hash-chain">
@@ -1880,7 +1886,7 @@
             style="color:var(--ink);">往后退着找</strong>——计算当前位置的完整前缀哈希，去缓存库里查，找不到就退一个 block 重新算、重新查。<strong
             style="color:var(--ink);">最多退 20 步。</strong><a class="doc-link"
             href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#explicit-cache-breakpoints"
-            target="_blank">文档 &nearr;</a>
+            target="_blank" rel="noopener noreferrer">文档 &nearr;</a>
         </p>
 
         <p style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:10px;">从断点位置向前回溯（退着找）：</p>
@@ -2004,7 +2010,7 @@
           </div>
           <div class="step-item">
             <div class="step-num">5</div>
-            <div class="step-body"><strong>TTL 管理：</strong>每条缓存独立计时，默认 5 分钟（可延长至 1 小时）。每被命中一次就免费刷新 TTL，超时未被命中则自动清理。BP① 和 BP② 几乎永不过期——每轮请求都会命中并刷新它们的 TTL <a class="doc-link" href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#1-hour-cache-duration" target="_blank">文档 &nearr;</a></div>
+            <div class="step-body"><strong>TTL 管理：</strong>每条缓存独立计时，默认 5 分钟（可延长至 1 小时）。每被命中一次就免费刷新 TTL，超时未被命中则自动清理。BP① 和 BP② 几乎永不过期——每轮请求都会命中并刷新它们的 TTL <a class="doc-link" href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#1-hour-cache-duration" target="_blank" rel="noopener noreferrer">文档 &nearr;</a></div>
           </div>
         </div>
       </div>
@@ -2014,7 +2020,7 @@
         <p style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:14px;">
           Anthropic 同时提供了两种缓存控制方式，底层缓存服务完全相同。<a class="doc-link"
             href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#automatic-caching"
-            target="_blank">文档 &nearr;</a>
+            target="_blank" rel="noopener noreferrer">文档 &nearr;</a>
         </p>
 
         <div class="mode-cmp">
@@ -2072,7 +2078,7 @@
           <div class="fq">Q: 我可以自己加第四个断点吗？</div>
           <div class="fa">Anthropic <a
               href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#explicit-cache-breakpoints"
-              target="_blank" style="color:var(--primary);">限制每个请求最多 4 个断点</a>（explicit + automatic 合计）。Claude Code 用了 3
+              target="_blank" rel="noopener noreferrer" style="color:var(--primary);">限制每个请求最多 4 个断点</a>（explicit + automatic 合计）。Claude Code 用了 3
             个，还有 1 个余量。但除非你有特殊的缓存分区需求，否则不需要——现有的三个断点位置已经能覆盖绝大多数场景。</div>
         </div>
 
@@ -2085,7 +2091,7 @@
           <div class="fq">Q: 1 小时 TTL 值得用吗？</div>
           <div class="fa">写成本翻倍（1.25&times; &rarr; 2&times;，详见 <a
               href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#1-hour-cache-duration"
-              target="_blank" style="color:var(--primary);">1-hour cache duration</a>），但如果你每隔 5~10 分钟回来继续同一段对话，1 小时 TTL
+              target="_blank" rel="noopener noreferrer" style="color:var(--primary);">1-hour cache duration</a>），但如果你每隔 5~10 分钟回来继续同一段对话，1 小时 TTL
             能让你回来时缓存还在。适合长时间的研究或调试会话。</div>
         </div>
 
@@ -2098,7 +2104,7 @@
           <div class="fq">Q: prompt 里多一个空格缓存会失效吗？</div>
           <div class="fa">会。缓存做的是<a
               href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching#how-prompt-caching-works"
-              target="_blank" style="color:var(--primary);">精确前缀匹配</a>——加密哈希，字节级别的。多一个空格、换一个大小写，整个哈希就变了，缓存全废。这也是为什么
+              target="_blank" rel="noopener noreferrer" style="color:var(--primary);">精确前缀匹配</a>——加密哈希，字节级别的。多一个空格、换一个大小写，整个哈希就变了，缓存全废。这也是为什么
             system 和 tools 要保持字节级一致。</div>
         </div>
       </div>
@@ -2106,10 +2112,10 @@
       <div class="note-footer">
         <p>
           参考资料：
-          <a href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching" target="_blank">Anthropic Prompt
+          <a href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching" target="_blank" rel="noopener noreferrer">Anthropic Prompt
             Caching 文档</a> &middot;
-          <a href="https://github.com/anthropics/anthropic-cookbook" target="_blank">Anthropic Cookbook</a> &middot;
-          <a href="https://claude.com/blog/token-saving-updates" target="_blank">Token-saving updates 博客</a>
+          <a href="https://github.com/anthropics/anthropic-cookbook" target="_blank" rel="noopener noreferrer">Anthropic Cookbook</a> &middot;
+          <a href="https://claude.com/blog/token-saving-updates" target="_blank" rel="noopener noreferrer">Token-saving updates 博客</a>
         </p>
       </div>
     </div>

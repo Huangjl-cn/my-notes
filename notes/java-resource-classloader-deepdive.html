@@ -59,9 +59,10 @@
       color: var(--text-muted);
       text-decoration: none;
       font-weight: 500;
-      transition: color 0.2s;
+      transition: color 0.2s, opacity 0.15s, transform 0.15s;
     }
     .topbar .back:hover { color: var(--green); }
+    .topbar .back:active { opacity: 0.7; transform: scale(0.97); }
     .topbar .sep { width: 1px; height: 14px; background: var(--border-subtle); }
     .topbar .tag {
       color: var(--text-muted);
@@ -79,6 +80,7 @@
       margin: 0 auto;
       padding: 58px 28px 34px;
       text-align: center;
+      animation: fadeSlideUp 0.5s ease-out both;
     }
     .hero h1 {
       font-family: var(--font-display);
@@ -408,7 +410,7 @@
 </head>
 <body>
 
-  <nav class="topbar">
+  <nav class="topbar" aria-label="导航">
     <a class="back" href="../index.html">&larr; Notes</a>
     <div class="sep"></div>
     <span class="tag">SYSTEM · deep dive</span>
@@ -420,13 +422,13 @@
     <div class="rule"></div>
   </section>
 
-  <nav class="tabs-wrap">
-    <button class="tab-btn active" data-t="s1">资源与编译</button>
-    <button class="tab-btn" data-t="s2">路径机制</button>
-    <button class="tab-btn" data-t="s3">JAR 内幕</button>
-    <button class="tab-btn" data-t="s4">classpath</button>
-    <button class="tab-btn" data-t="s5">JVM 内部</button>
-    <button class="tab-btn" data-t="s6">完整流程</button>
+  <nav class="tabs-wrap" aria-label="内容导航">
+    <button type="button" class="tab-btn active" data-t="s1">资源与编译</button>
+    <button type="button" class="tab-btn" data-t="s2">路径机制</button>
+    <button type="button" class="tab-btn" data-t="s3">JAR 内幕</button>
+    <button type="button" class="tab-btn" data-t="s4">classpath</button>
+    <button type="button" class="tab-btn" data-t="s5">JVM 内部</button>
+    <button type="button" class="tab-btn" data-t="s6">完整流程</button>
   </nav>
 
   <main class="content">
@@ -836,6 +838,7 @@
           <tr><td><strong>方法区（Method Area）</strong></td><td>类元数据（字节码、常量池、静态变量、方法等）</td><td>类加载后</td></tr>
           <tr><td><strong>直接内存 / Native</strong></td><td>JAR 文件的索引缓存、打开的文件描述符</td><td>运行时按需</td></tr>
           <tr><td><strong>磁盘</strong></td><td>.class 文件和资源文件</td><td>类加载、资源查找时读取</td></tr>
+        </tbody>
       </table>
       </div>
 

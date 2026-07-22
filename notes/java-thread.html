@@ -62,9 +62,10 @@
       color: var(--text-muted);
       text-decoration: none;
       font-weight: 500;
-      transition: color 0.2s;
+      transition: color 0.2s, opacity 0.15s, transform 0.15s;
     }
     .topbar .back:hover { color: var(--green); }
+    .topbar .back:active { opacity: 0.7; transform: scale(0.97); }
     .topbar .sep { width: 1px; height: 14px; background: var(--border-subtle); }
     .topbar .tag {
       color: var(--text-muted);
@@ -82,6 +83,7 @@
       margin: 0 auto;
       padding: 58px 28px 34px;
       text-align: center;
+      animation: fadeSlideUp 0.5s ease-out both;
     }
     .hero h1 {
       font-family: var(--font-display);
@@ -468,15 +470,15 @@
 
   <!-- ══ Tabs ══ -->
   <nav class="tabs-wrap">
-    <button class="tab-btn active" data-t="t1">函数式基石</button>
+    <button type="button" class="tab-btn active" data-t="t1">函数式基石</button>
     <span class="tab-arrow">&rarr;</span>
-    <button class="tab-btn" data-t="t2">并发演进史</button>
+    <button type="button" class="tab-btn" data-t="t2">并发演进史</button>
     <span class="tab-arrow">&rarr;</span>
-    <button class="tab-btn" data-t="t3">虚拟线程时代</button>
+    <button type="button" class="tab-btn" data-t="t3">虚拟线程时代</button>
     <span class="tab-arrow">&rarr;</span>
-    <button class="tab-btn" data-t="t4">内部原理</button>
+    <button type="button" class="tab-btn" data-t="t4">内部原理</button>
     <span class="tab-arrow">&rarr;</span>
-    <button class="tab-btn" data-t="t5">全景回顾</button>
+    <button type="button" class="tab-btn" data-t="t5">全景回顾</button>
   </nav>
 
   <!-- ══ Content ══ -->
