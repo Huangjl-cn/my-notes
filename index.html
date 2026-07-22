@@ -452,6 +452,70 @@
       gap: 8px;
     }
 
+    /* ── Scroll nav ── */
+    .scroll-nav {
+      position: fixed;
+      right: 28px;
+      bottom: 32px;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 1px solid var(--hairline);
+      background: rgba(255, 250, 242, 0.72);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      color: var(--primary);
+      font-size: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 100;
+      box-shadow:
+        0 4px 20px rgba(56, 43, 34, 0.10),
+        0 0 0 5px rgba(184, 111, 82, 0.07),
+        0 1px 0 rgba(255, 255, 255, 0.82) inset;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(12px);
+      transition: opacity 0.35s ease, transform 0.35s ease, border-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .scroll-nav.visible {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    .scroll-nav:hover {
+      border-color: var(--primary);
+      color: var(--primary-deep);
+      box-shadow:
+        0 8px 28px rgba(56, 43, 34, 0.16),
+        0 0 0 8px rgba(184, 111, 82, 0.12),
+        0 1px 0 rgba(255, 255, 255, 0.9) inset;
+    }
+
+    .scroll-nav:active {
+      transform: translateY(0) scale(0.94);
+      transition: transform 0.12s ease;
+    }
+
+    .scroll-nav .arrow-icon {
+      display: inline-block;
+      line-height: 1;
+      font-weight: 700;
+      transition: transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .scroll-nav.to-bottom .arrow-icon {
+      transform: rotate(0deg);
+    }
+
+    .scroll-nav.to-top .arrow-icon {
+      transform: rotate(180deg);
+    }
+
     /* ── Page transition ── */
     .list.transitioning .row {
       animation: fadeSlideDown .22s ease-in both;
@@ -598,6 +662,14 @@
       .footer-spacer {
         height: 48px;
       }
+
+      .scroll-nav {
+        right: 16px;
+        bottom: 20px;
+        width: 40px;
+        height: 40px;
+        font-size: 18px;
+      }
     }
   </style>
 </head>
@@ -625,6 +697,10 @@
       <button class="page-btn arr" data-dir="1" aria-label="下一页">&rarr;</button>
     </nav>
   </div>
+
+  <button class="scroll-nav to-bottom" aria-label="滚动到底部">
+    <span class="arrow-icon">↓</span>
+  </button>
 
   <footer>
     <div class="mark"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -748,6 +824,55 @@
       renderPage(0);
       arrBtns[0].disabled = true;
       if (totalPages <= 1) arrBtns[1].disabled = true;
+    })();
+
+    // ── Scroll nav ──
+    (function() {
+      var btn = document.querySelector('.scroll-nav');
+      var ticking = false;
+
+      function update() {
+        var st = window.scrollY || document.documentElement.scrollTop;
+        var dh = document.documentElement.scrollHeight;
+        var wh = window.innerHeight;
+
+        if (dh <= wh + 60) {
+          btn.classList.remove('visible');
+          return;
+        }
+
+        btn.classList.add('visible');
+
+        if (st + wh >= dh - 80) {
+          btn.classList.remove('to-bottom');
+          btn.classList.add('to-top');
+          btn.setAttribute('aria-label', '滚动到顶部');
+        } else {
+          btn.classList.remove('to-top');
+          btn.classList.add('to-bottom');
+          btn.setAttribute('aria-label', '滚动到底部');
+        }
+      }
+
+      window.addEventListener('scroll', function() {
+        if (!ticking) {
+          requestAnimationFrame(function() {
+            update();
+            ticking = false;
+          });
+          ticking = true;
+        }
+      }, { passive: true });
+
+      btn.addEventListener('click', function() {
+        if (btn.classList.contains('to-top')) {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+        }
+      });
+
+      update();
     })();
   </script>
 </body>
