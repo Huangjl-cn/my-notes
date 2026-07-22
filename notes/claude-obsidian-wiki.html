@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude Obsidian：个人知识库 — 从 LLM Wiki Pattern 到工程实现</title>
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+  <style>
+    /* ── Design Tokens ── */
+    :root {
+      --primary: #cc785c;
+      --primary-active: #a9583e;
+      --ink: #141413;
+      --body: #3d3d3a;
+      --body-strong: #252523;
+      --muted: #6c6a64;
+      --muted-soft: #8e8b82;
+      --hairline: #e6dfd8;
+      --hairline-soft: #ebe6df;
+      --canvas: #faf9f5;
+      --surface-soft: #f5f0e8;
+      --surface-card: #efe9de;
+      --surface-dark: #181715;
+      --surface-dark-soft: #1f1e1b;
+      --surface-dark-elevated: #252320;
+      --on-primary: #ffffff;
+      --on-dark: #faf9f5;
+      --on-dark-soft: #a09d96;
+      --accent-teal: #5db8a6;
+      --accent-amber: #e8a55a;
+      --success: #5db872;
+      --error: #c64545;
+      --font-display: 'Cormorant Garamond', Garamond, 'Times New Roman', serif;
+      --font-body: 'DM Sans', Inter, -apple-system, 'PingFang SC', 'Segoe UI', sans-serif;
+      --font-code: 'JetBrains Mono', ui-monospace, monospace;
+    }
+
+    /* ── Reset ── */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    /* ── Body & Texture ── */
+    body {
+      font-family: var(--font-body);
+      background:
+        radial-gradient(ellipse at 50% -18%, rgba(184,111,82,.10), transparent 42vw),
+        linear-gradient(180deg, #fffaf3 0%, var(--canvas) 46%, #f7efe4 100%);
+      color: var(--body);
+      min-height: 100vh;
+    }
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none; z-index: 0;
+    }
+    body::after {
+      content: '';
+      position: fixed; top: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, var(--primary) 0 120px, var(--hairline) 120px 100%);
+      z-index: 999;
+    }
+
+    /* ── Keyframes ── */
+    @keyframes fadeSlideUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Topbar ── */
+    .topbar {
+      position: sticky; top: 0; z-index: 100;
+      display: flex; align-items: center; gap: 10px;
+      padding: 13px 28px;
+      background: rgba(251,247,239,.86);
+      -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(62,50,40,.10);
+      font-size: 13px;
+    }
+    .topbar .back { color: var(--muted); text-decoration: none; font-weight: 500; }
+    .topbar .back:hover { color: var(--primary); }
+    .topbar .sep { width: 1px; height: 14px; background: var(--hairline); }
+    .topbar .tag {
+      color: var(--muted-soft);
+      font-family: var(--font-code); font-size: 11px;
+      letter-spacing: 1.4px; text-transform: uppercase;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      position: relative; z-index: 1;
+      max-width: 1320px; margin: 0 auto;
+      padding: 58px 28px 34px; text-align: center;
+    }
+    .hero h1 {
+      max-width: 820px; margin: 0 auto 22px;
+      font-family: var(--font-display);
+      font-size: clamp(34px, 4.2vw, 52px);
+      font-weight: 500; letter-spacing: -1.2px; line-height: 1.08;
+      color: var(--ink);
+    }
+    .hero .sub {
+      max-width: 1060px; margin: 0 auto;
+      font-size: 17px; line-height: 1.75; color: var(--muted);
+    }
+    .hero .rule {
+      width: min(100%, 520px); height: 1px;
+      margin: 28px auto 0;
+      background: linear-gradient(90deg, transparent, var(--primary), transparent);
+    }
+
+    /* ── Tabs ── */
+    .tabs-wrap {
+      position: sticky; top: 48px; z-index: 99;
+      width: min(1320px, calc(100% - 48px)); margin: 0 auto 10px;
+      padding: 10px 24px;
+      display: flex; align-items: center; justify-content: center; gap: 0;
+      overflow-x: auto;
+      border: 1px solid rgba(62,50,40,.10); border-radius: 999px;
+      background: rgba(251,247,239,.84);
+      -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+      box-shadow: 0 18px 44px rgba(56,43,34,.06);
+    }
+    .tab-btn {
+      flex-shrink: 0; padding: 7px 14px;
+      border: 1px solid transparent; border-radius: 999px;
+      background: transparent; color: var(--muted);
+      font-family: var(--font-body); font-size: 13px; font-weight: 500;
+      cursor: pointer; transition: all .2s; white-space: nowrap;
+    }
+    .tab-btn:hover { border-color: var(--primary); color: var(--ink); }
+    .tab-btn.active {
+      background: color-mix(in srgb, var(--primary) 10%, var(--surface-soft));
+      color: var(--primary-active);
+      border-color: color-mix(in srgb, var(--primary) 22%, var(--hairline));
+    }
+    .tab-arrow { flex-shrink: 0; font-size: 13px; color: #c4c0b8; font-weight: 600; padding: 0 4px; user-select: none; }
+
+    /* ── Content ── */
+    .content {
+      position: relative; z-index: 1;
+      max-width: 1320px; margin: 0 auto;
+      padding: 34px 24px 72px;
+    }
+    .tab-panel { display: none; animation: fadeSlideUp .3s ease-out both; }
+    .tab-panel.active { display: block; }
+
+    /* ── Card ── */
+    .card {
+      background: rgba(255,250,242,.96);
+      border: 1px solid rgba(62,50,40,.10); border-radius: 24px;
+      padding: 38px 44px; margin-bottom: 18px;
+      box-shadow: 0 28px 80px rgba(56,43,34,.08), 0 1px 0 rgba(255,255,255,.9) inset;
+    }
+    .sec-name {
+      font-family: var(--font-display);
+      font-size: 28px; line-height: 1.08; font-weight: 500; color: var(--ink);
+      margin-bottom: 18px; padding-bottom: 16px;
+      border-bottom: 1px solid var(--hairline);
+    }
+    .sec-name::before {
+      content: ''; display: block;
+      width: 54px; height: 2px;
+      margin-bottom: 16px; background: var(--primary);
+    }
+    .card p { font-size: 14px; line-height: 1.75; color: var(--body); margin-bottom: 12px; }
+    .card p:last-child { margin-bottom: 0; }
+    .card p strong { color: var(--body-strong); }
+
+    /* ── Inline Code ── */
+    code {
+      font-family: var(--font-code); font-size: 12.5px;
+      background: var(--surface-soft); padding: 2px 6px;
+      border-radius: 4px; color: var(--ink);
+    }
+
+    /* ── Dark Box ── */
+    .dark-box {
+      background: linear-gradient(180deg, #1c1815, #15120f);
+      border: 1px solid rgba(255,250,242,.08); border-radius: 18px;
+      padding: 22px 24px; margin: 14px 0;
+      color: var(--on-dark); overflow-x: auto; overscroll-behavior-x: contain;
+    }
+    .dark-box .dt {
+      font-size: 12px; color: var(--primary); font-weight: 600;
+      margin-bottom: 10px; letter-spacing: .6px;
+    }
+    .dark-box .dr {
+      font-family: var(--font-code); font-size: 12px; line-height: 1.7;
+      color: var(--on-dark-soft); white-space: pre; tab-size: 2;
+    }
+    .dark-box .dr .hl { background: rgba(204,120,92,.25); padding: 1px 4px; border-radius: 3px; color: #f5b8a3; }
+    .dark-box .dr .tk-cmt { color: #6c6a64; font-style: italic; }
+    .dark-box .dr .tk-str { color: #e8c89e; }
+    .dark-box .dr .tk-kw { color: #d4958b; }
+    .dark-box .dr .tk-num { color: #8dba8a; }
+
+    /* ── Insight Box ── */
+    .ins {
+      text-align: left;
+      background: #f4ebdf;
+      border: 1px solid var(--hairline); border-left: 3px solid var(--primary);
+      border-radius: 16px; padding: 16px 18px;
+      font-size: 14px; line-height: 1.6; color: var(--muted);
+      margin: 14px 0;
+    }
+    .ins strong { color: var(--ink); }
+
+    /* ── Blockquote ── */
+    blockquote {
+      border-left: 3px solid var(--primary);
+      margin: 14px 0; padding: 12px 18px;
+      background: color-mix(in srgb, var(--surface-soft) 72%, #fff 28%);
+      border-radius: 0 14px 14px 0;
+      font-size: 14px; line-height: 1.7; color: var(--muted);
+      font-style: italic;
+    }
+    blockquote strong { color: var(--body-strong); font-style: normal; }
+
+    /* ── Table ── */
+    .mtbl {
+      width: 100%; border-collapse: collapse; font-size: 13px;
+      margin: 14px 0;
+      border: 1px solid var(--hairline); border-radius: 14px; overflow: hidden;
+    }
+    .mtbl thead th {
+      background: var(--surface-soft); color: var(--ink); font-weight: 600;
+      padding: 10px 14px; text-align: left;
+      border-bottom: 1px solid var(--hairline);
+    }
+    .mtbl tbody td {
+      padding: 10px 14px; border-bottom: 1px solid var(--hairline-soft); color: var(--body);
+    }
+    .mtbl tbody td:first-child { color: var(--body-strong); font-weight: 500; }
+    .mtbl tbody tr:last-child td { border-bottom: none; }
+    .mtbl tbody tr:hover { background: var(--surface-soft); }
+    .mtbl code { font-size: 11.5px; }
+
+    /* ── Compare Two-Col ── */
+    .cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 14px 0; }
+    .cmp-s {
+      border-radius: 18px; border: 1px solid var(--hairline);
+      background: color-mix(in srgb, var(--surface-soft) 72%, #fff 28%);
+      padding: 20px 18px;
+    }
+    .cmp-s .st { font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+    .cmp-s ul { list-style: none; padding: 0; font-size: 13px; line-height: 1.65; }
+    .cmp-s ul li { padding: 2px 0; }
+    .cmp-s ul li::before { content: '· '; }
+    .cmp-s.goal { border-left: 3px solid #5db872; background: rgba(93,184,114,.04); }
+    .cmp-s.goal .st { color: #3d8b55; }
+    .cmp-s.goal ul li::before { color: #5db872; }
+    .cmp-s.pain { border-left: 3px solid #c64545; background: rgba(198,69,69,.04); }
+    .cmp-s.pain .st { color: #b0483a; }
+    .cmp-s.pain ul li::before { color: #c64545; }
+
+    /* ── Three Column ── */
+    .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 14px 0; }
+    .three-col .col {
+      border-radius: 18px; padding: 18px 14px; text-align: center;
+      border: 1px solid var(--hairline);
+      background: color-mix(in srgb, var(--surface-soft) 72%, #fff 28%);
+    }
+    .three-col .col .cl {
+      font-family: var(--font-code); font-size: 17px; font-weight: 700;
+      margin-bottom: 6px; color: var(--accent-amber);
+    }
+    .three-col .col .cd { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+
+    /* ── Two-Col Layout ── */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 12px 0; }
+    .two-col .col-card {
+      background: color-mix(in srgb, var(--surface-soft) 72%, #fff 28%);
+      border-radius: 18px; padding: 16px; border: 1px solid var(--hairline);
+    }
+    .two-col .col-card .cl {
+      font-family: var(--font-code); font-size: 13px; font-weight: 600;
+      margin-bottom: 8px; color: var(--primary);
+    }
+    .two-col .col-card .cd { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+
+    /* ── Path Diagram ── */
+    .path {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px;
+      margin: 24px 0 16px; padding: 16px;
+      border: 1px solid var(--hairline-soft); border-radius: 18px;
+      background: color-mix(in srgb, var(--surface-soft) 72%, #fff 28%);
+    }
+    .path-leg { display: flex; align-items: center; gap: 6px; }
+    .path-node {
+      background: #fff; border: 1px solid var(--hairline); border-radius: 14px;
+      padding: 10px 14px; min-width: 88px; text-align: center;
+      box-shadow: 0 8px 22px rgba(20,20,19,.055);
+    }
+    .path-node .pn { font-size: 11px; font-weight: 600; color: var(--primary); margin-bottom: 2px; }
+    .path-node .pname { font-size: 13px; font-weight: 500; color: var(--ink); }
+    .path-node .pmath { font-size: 10.5px; color: var(--muted-soft); font-family: var(--font-code); margin-top: 1px; }
+    .path-node.highlight { border-color: var(--primary); background: var(--surface-soft); }
+    .path-node.highlight .pn { color: var(--ink); }
+    .path-node.highlight .pname { font-weight: 600; }
+    .path-arrow { flex-shrink: 0; display: flex; align-items: center; }
+    .path-arrow::after {
+      content: '';
+      display: block;
+      border-left: 6px solid var(--primary);
+      border-top: 4.5px solid transparent;
+      border-bottom: 4.5px solid transparent;
+      filter: drop-shadow(0 0 8px rgba(204,120,92,.28));
+    }
+
+    /* ── Step Flow ── */
+    .flow-steps { display: flex; flex-direction: column; gap: 3px; margin: 12px 0; }
+    .flow-step { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; padding: 6px 0; }
+    .flow-step .num {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: color-mix(in srgb, var(--primary) 9%, var(--surface-soft));
+      border: 1px solid color-mix(in srgb, var(--primary) 38%, var(--hairline));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 600; color: var(--primary); flex-shrink: 0;
+    }
+    .flow-step .fs-text { font-size: 13px; color: var(--body); line-height: 1.55; padding-top: 3px; }
+    .flow-step .fs-text strong { color: var(--body-strong); }
+
+    /* ── Summary Card ── */
+    .summary {
+      background: color-mix(in srgb, var(--surface-soft) 72%, #fff 28%);
+      border: 1px solid var(--hairline); border-radius: 18px;
+      padding: 20px 24px; margin: 14px 0;
+    }
+    .summary strong { color: var(--ink); font-size: 14px; }
+    .summary ul { list-style: none; padding: 0; margin-top: 8px; }
+    .summary ul li { font-size: 13px; color: var(--body); line-height: 1.7; padding: 2px 0; }
+    .summary ul li::before { content: '→ '; color: var(--primary); font-weight: 600; }
+
+    /* ── Details (Foldable) ── */
+    details { margin: 14px 0; }
+    details > summary {
+      cursor: pointer;
+      font-size: 13px; font-weight: 600;
+      color: var(--muted);
+      padding: 8px 0;
+      border-bottom: 1px solid var(--hairline-soft);
+      list-style: none;
+    }
+    details > summary::-webkit-details-marker { display: none; }
+    details > summary::before {
+      content: '▸ ';
+      display: inline-block;
+      width: 16px;
+      color: var(--primary);
+      transition: transform .2s;
+    }
+    details[open] > summary::before { content: '▾ '; }
+    details[open] > summary { margin-bottom: 10px; }
+    details .dark-box, details .mtbl, details blockquote { margin: 10px 0; }
+    details p { font-size: 13px; color: var(--muted); line-height: 1.65; margin-bottom: 8px; }
+
+    /* ── References ── */
+    .refs {
+      max-width: 1320px; margin: 0 auto; padding: 0 24px 48px;
+      position: relative; z-index: 1;
+    }
+    .refs h2 {
+      font-family: var(--font-display); font-size: 22px; color: var(--ink);
+      margin-bottom: 14px;
+    }
+    .refs ul { list-style: none; padding: 0; }
+    .refs ul li { font-size: 13px; line-height: 1.65; padding: 4px 0; }
+    .refs ul li a { color: var(--primary); text-decoration: none; }
+    .refs ul li a:hover { text-decoration: underline; }
+
+    /* ── Utility ── */
+    .card, .dark-box, .ins, .cmp-s, .path, .mtbl { max-width: 100%; }
+    .two-col > *, .three-col > *, .cmp > *, .path-node { min-width: 0; }
+    .dark-box, .mtbl, .path { overflow-x: auto; overscroll-behavior-x: contain; }
+    p, code, .ins, .path-node { overflow-wrap: anywhere; }
+    .tab-btn:focus-visible, .topbar a:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+    a { color: var(--primary); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Panorama Diagram ── */
+    .pano {
+      display: flex; flex-direction: column; align-items: center; gap: 0;
+      background: linear-gradient(180deg, #1c1815, #15120f);
+      border: 1px solid rgba(255,250,242,.08); border-radius: 18px;
+      padding: 28px 24px 24px; margin: 14px 0;
+      overflow-x: auto; overscroll-behavior-x: contain;
+    }
+    .pano-layer {
+      width: 100%; max-width: 680px;
+      border: 1px solid rgba(255,250,242,.10);
+      border-left: 3px solid var(--primary);
+      border-radius: 14px;
+      background: rgba(255,250,242,.035);
+      padding: 18px 22px;
+    }
+    .pano-layer .pl-tag {
+      font-family: var(--font-code); font-size: 10px; font-weight: 600;
+      color: var(--primary); letter-spacing: 1.2px; text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .pano-layer .pl-name {
+      font-family: var(--font-code); font-size: 16px; font-weight: 600;
+      color: var(--on-dark); margin-bottom: 8px;
+    }
+    .pano-layer .pl-desc {
+      font-size: 12.5px; color: var(--on-dark-soft); line-height: 1.6;
+      margin-bottom: 4px;
+    }
+    .pano-layer .pl-note {
+      font-size: 11.5px; color: var(--muted-soft); line-height: 1.5;
+    }
+    .pano-layer .pl-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 2px 18px;
+      margin-top: 8px;
+    }
+    .pano-layer .pl-grid .pli {
+      font-family: var(--font-code); font-size: 11px; color: var(--on-dark-soft);
+      padding: 2px 0; white-space: nowrap;
+    }
+    .pano-layer .pl-grid .pli em {
+      font-style: normal; color: var(--muted-soft); font-family: var(--font-body);
+      font-size: 10.5px;
+    }
+    .pano-layer .pl-grid .pli.pl-full { grid-column: 1 / -1; }
+    .pano-layer .pl-sub {
+      font-size: 11px; font-weight: 600; color: var(--on-dark-soft);
+      margin-top: 10px; margin-bottom: 2px;
+      letter-spacing: .4px;
+    }
+    .pano-arrow {
+      display: flex; flex-direction: column; align-items: center;
+      padding: 1px 0;
+    }
+    .pano-arrow .pa-line {
+      width: 1px; height: 18px;
+      background: linear-gradient(180deg, var(--primary), rgba(204,120,92,.25));
+    }
+    .pano-arrow .pa-label {
+      font-family: var(--font-code); font-size: 10px; color: var(--primary);
+      padding: 2px 10px;
+      border: 1px solid rgba(204,120,92,.22);
+      border-radius: 10px;
+      background: rgba(204,120,92,.07);
+    }
+    .pano-arrow .pa-head {
+      width: 0; height: 0;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 6px solid var(--primary);
+      margin-bottom: 1px;
+    }
+    .pano-divider {
+      width: 100%; max-width: 680px; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,250,242,.12), transparent);
+      margin: 20px 0 14px;
+    }
+    .pano-tools-title {
+      font-size: 12px; font-weight: 600; color: var(--on-dark-soft);
+      text-align: center; margin-bottom: 10px; letter-spacing: .5px;
+    }
+    .pano-tools {
+      width: 100%; max-width: 680px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 2px 22px;
+    }
+    .pano-tools .pt {
+      font-family: var(--font-code); font-size: 10.5px; color: var(--on-dark-soft);
+      padding: 2px 0; white-space: nowrap;
+    }
+    .pano-tools .pt span {
+      color: var(--muted-soft); font-family: var(--font-body); font-size: 10px;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 760px) {
+      .hero { padding: 42px 18px 26px; }
+      .hero h1 { font-size: 28px; }
+      .hero .sub { font-size: 14px; }
+      .card { padding: 22px 16px; }
+      .sec-name { font-size: 22px; }
+      .tabs-wrap { justify-content: flex-start; padding: 8px 16px; border-radius: 24px; }
+      .tab-btn { font-size: 12px; padding: 5px 10px; }
+      .two-col, .three-col, .cmp { grid-template-columns: 1fr; }
+      .path { flex-direction: column; }
+      .path-arrow { transform: rotate(90deg); }
+      .pano { padding: 18px 12px; }
+      .pano-layer { padding: 14px 14px; }
+      .pano-layer .pl-grid { grid-template-columns: 1fr; }
+      .pano-tools { grid-template-columns: 1fr; }
+    }
+
+    /* ── Accessibility ── */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- ── Topbar ── -->
+  <div class="topbar">
+    <a class="back" href="../index.html">&larr; 首页</a>
+    <div class="sep"></div>
+    <span class="tag">Agent · claude-obsidian</span>
+  </div>
+
+  <!-- ── Hero ── -->
+  <section class="hero">
+    <h1>Claude Obsidian：个人知识库</h1>
+    <div class="sub">以 Karpathy 的 LLM Wiki 思想为起点，深入剖析如何用三层架构、15 个 Skills 和 10 个脚本将蓝图变成完整的施工实例</div>
+    <div class="rule"></div>
+  </section>
+
+  <!-- ── Tabs ── -->
+  <nav class="tabs-wrap">
+    <button type="button" class="tab-btn active" data-t="t1">思想源头</button>
+    <span class="tab-arrow">&rarr;</span>
+    <button type="button" class="tab-btn" data-t="t2">架构映射</button>
+    <span class="tab-arrow">&rarr;</span>
+    <button type="button" class="tab-btn" data-t="t3">检索管线</button>
+    <span class="tab-arrow">&rarr;</span>
+    <button type="button" class="tab-btn" data-t="t4">技能协作</button>
+    <span class="tab-arrow">&rarr;</span>
+    <button type="button" class="tab-btn" data-t="t5">全景回顾</button>
+  </nav>
+
+  <!-- ── Content ── -->
+  <main class="content">
+
+    <!-- ═══════════ TAB 1: 思想源头 ═══════════ -->
+    <section class="tab-panel active" id="t1">
+
+      <article class="card">
+        <h2 class="sec-name">问题：传统 RAG 不累积</h2>
+        <p>2026 年，Andrej Karpathy 在一篇 <a href="https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f" target="_blank" rel="noopener">gist 文章</a>中指出了当前 LLM 知识系统的一个根本缺陷——大多数方案（ChatGPT 文件上传、NotebookLM、传统 RAG）共享同一个问题：</p>
+        <blockquote>The LLM is rediscovering knowledge from scratch on every question. There is no accumulation.</blockquote>
+        <p>每次提问，LLM 从原始文档中重新检索片段、重新推导。问一个需要综合五篇文档的问题，LLM 每次都要从头拼凑。<strong>知识不累积，不生长。</strong>每次对话结束后，产生的洞察消失在聊天历史中，下一次提问又从零开始。</p>
+        <div class="ins"><strong>核心矛盾：</strong>LLM 有能力综合、分析和关联知识，但传统交互模式将这些产出视为一次性消耗品——没有任何机制将"好的答案"沉淀为持久的知识资产。</div>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">方案：LLM 维护一个持久化 Wiki</h2>
+        <p>Karpathy 的替代方案是让 LLM <strong>增量构建并持续维护</strong>一个结构化的、相互链接的 Markdown 文件集合——一个 Wiki。这个 Wiki 位于用户和原始来源之间：</p>
+        <blockquote>Rather than only retrieving from raw documents at query time, the LLM incrementally builds and maintains a persistent wiki — structured, interlinked markdown files sitting between the user and raw sources.</blockquote>
+        <p>当新来源到达时，LLM 读取它、提取关键信息、整合到已有 Wiki：更新实体页、修订主题摘要、标注矛盾、强化或修正现有结论。<strong>知识编译一次，持续保持最新，而不是每次查询时重新推导。</strong></p>
+        <div class="ins"><strong>关键洞察：</strong>Wiki 是一个持续复利的产物。交叉引用已经存在，矛盾已经被标注，综合结论已经反映了所有已读内容。每增加一个来源、每问一个问题，Wiki 更丰富一层。人类永远（或几乎）从不自己写 Wiki——LLM 处理全部簿记工作。</div>
+        <p>Karpathy 用一个精妙的类比概括了整个理念：</p>
+        <blockquote>Obsidian is the IDE; the LLM is the programmer; the wiki is the codebase.</blockquote>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">三层架构</h2>
+        <p>Karpathy 将系统分为三个清晰的层次，每一层有明确的职责和操作者：</p>
+        <table class="mtbl">
+          <thead><tr><th>层</th><th>内容</th><th>谁操作</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td>Layer 1: 原始来源</td><td>文章、论文、图片、数据文件</td><td>人类放入，LLM 只读</td><td>不可变，事实的源头</td></tr>
+            <tr><td>Layer 2: Wiki</td><td>LLM 生成的 Markdown：摘要、实体、概念、对比、综合</td><td>LLM 写，人类读</td><td>知识积累的核心</td></tr>
+            <tr><td>Layer 3: Schema</td><td>CLAUDE.md / AGENTS.md——结构、约定、工作流</td><td>人 + LLM 共同演化</td><td>让 LLM 成为「有纪律的 Wiki 维护者」</td></tr>
+          </tbody>
+        </table>
+        <p>这种分层设计的精妙之处在于：每一层的关注点完全隔离。人类不需要操心 Wiki 的维护（Layer 2），LLM 不需要操心来源的真伪（Layer 1），而 Schema（Layer 3）确保 LLM 的行为是可预测、可约束的——它不是一个通用聊天机器人，而是一个有纪律的 Wiki 维护者。</p>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">三种核心操作</h2>
+        <p>围绕三层架构，Karpathy 定义了三种核心操作来驱动知识库的运转：</p>
+        <div class="three-col">
+          <div class="col"><div class="cl">Ingest</div><div class="cd">摄取——人把来源放入原始集合，通知 LLM。LLM 读取 → 讨论关键发现 → 写摘要页 → 更新索引 → 更新相关实体/概念页 → 追加日志。单个来源可能触碰 10–15 个 Wiki 页面。</div></div>
+          <div class="col"><div class="cl">Query</div><div class="cd">查询——人提问，LLM 搜索相关页面 → 阅读 → 综合回答（带引用）。好的答案被归档回 Wiki，不消失于聊天历史。对比、分析和发现的关联都是有价值的产物。</div></div>
+          <div class="col"><div class="cl">Lint</div><div class="cd">整理——定期健康检查：页面矛盾、过期结论、孤儿页面、缺失的概念页、缺失的交叉引用、可通过网络搜索填补的数据缺口。随 Wiki 增长保持健康。</div></div>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">索引与日志：Wiki 的导航系统</h2>
+        <p>两个特殊文件帮助 LLM 和用户导航不断增长的 Wiki：</p>
+        <div class="two-col">
+          <div class="col-card"><div class="cl">index.md（内容导向）</div><div class="cd">Wiki 中所有内容的目录，按类别组织，每个条目带链接和一句话摘要。LLM 每次摄取后更新。查询时 LLM 先读索引找到相关页面，再深入阅读。在中等规模（~100 来源、~数百页）下运行良好，避免了对 embedding-based RAG 基础设施的依赖。</div></div>
+          <div class="col-card"><div class="cl">log.md（时间导向）</div><div class="cd">只追加的操作记录，记录发生了什么、何时发生。用一致的格式前缀（如 <code>## [2026-07-20] ingest | Article Title</code>），可用 <code>grep</code> 等 Unix 工具解析。当 Wiki 增长到 index.md 不够用时，需要更强大的搜索工具。</div></div>
+        </div>
+        <div class="ins"><strong>为什么有效：</strong>Karpathy 指出，维护知识库最繁琐的部分不是阅读或思考，而是簿记。人类放弃 Wiki 的原因不是不会读或不会想，而是维护负担增长快于价值增长。LLM 不觉得无聊、不会忘记更新交叉引用、可以一次触碰 15 个文件——维护成本趋近于零。</div>
+        <p>Karpathy 将这一理念追溯至 Vannevar Bush 的 Memex（1945）——一个私人的、策展的知识存储，文档之间的关联与文档本身同等价值。Bush 没能解决的是"谁来维护"——而 LLM 恰好填补了这个空缺。</p>
+      </article>
+
+    </section>
+
+    <!-- ═══════════ TAB 2: 架构映射 ═══════════ -->
+    <section class="tab-panel" id="t2">
+
+      <article class="card">
+        <h2 class="sec-name">三层架构 → 仓库目录结构</h2>
+        <p>本仓库将 Karpathy 的三层架构精确映射为具体的目录结构。<strong>每一层都有对应的文件系统路径和操作约定</strong>：</p>
+        <table class="mtbl">
+          <thead><tr><th>Karpathy 的三层</th><th>本仓库映射</th><th>关键约束</th></tr></thead>
+          <tbody>
+            <tr><td>Layer 1: Raw Sources</td><td><code>.raw/</code></td><td>不可变原始文档，LLM 只读</td></tr>
+            <tr><td>Layer 2: Wiki</td><td><code>wiki/</code></td><td>LLM 维护的结构化 Markdown</td></tr>
+            <tr><td>Layer 3: Schema</td><td><code>CLAUDE.md</code> + <code>skills/</code></td><td>结构、约定、工作流定义</td></tr>
+          </tbody>
+        </table>
+        <div class="path">
+          <div class="path-node highlight"><div class="pn">Layer 1</div><div class="pname">.raw/</div></div>
+          <div class="path-arrow"></div>
+          <div class="path-node"><div class="pn">wiki-ingest</div><div class="pname">摄取</div></div>
+          <div class="path-arrow"></div>
+          <div class="path-node highlight"><div class="pn">Layer 2</div><div class="pname">wiki/</div></div>
+          <div class="path-arrow"></div>
+          <div class="path-node"><div class="pn">wiki-query</div><div class="pname">查询</div></div>
+          <div class="path-arrow"></div>
+          <div class="path-node highlight"><div class="pn">Layer 3</div><div class="pname">CLAUDE.md</div></div>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">Layer 1 + Layer 2：来源与 Wiki 的目录组织</h2>
+        <p><strong>Layer 1（<code>.raw/</code>）</strong>存放未处理的原始文档——GitHub README、视频转录、网页抓取。LLM 只从这里读，绝不修改。例如张司机 20 篇视频转录、13 个前端美化 GitHub 仓库的 README，都是 .raw/ 中的不可变来源。</p>
+        <p><strong>Layer 2（<code>wiki/</code>）</strong>是 LLM 生成和维护的知识库，按内容类型分层组织：</p>
+        <table class="mtbl">
+          <thead><tr><th>目录</th><th>Karpathy 对应</th><th>内容</th></tr></thead>
+          <tbody>
+            <tr><td><code>wiki/sources/</code></td><td>source pages</td><td>每篇原始文档的结构化摘要</td></tr>
+            <tr><td><code>wiki/concepts/</code></td><td>concept pages</td><td>提取的概念、模式、框架</td></tr>
+            <tr><td><code>wiki/entities/</code></td><td>entity pages</td><td>人物、组织、产品</td></tr>
+            <tr><td><code>wiki/questions/</code></td><td>filed answers</td><td>归档的问答分析</td></tr>
+            <tr><td><code>wiki/index.md</code></td><td>index.md</td><td>主目录索引</td></tr>
+            <tr><td><code>wiki/log.md</code></td><td>log.md</td><td>只追加操作日志</td></tr>
+            <tr><td><code>wiki/hot.md</code></td><td>仓库扩展</td><td>~500 字近期上下文缓存</td></tr>
+            <tr><td><code>wiki/meta/</code></td><td>仓库扩展</td><td>仪表盘、lint 报告</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">Layer 3：Schema 的重大扩展</h2>
+        <p>Karpathy 的 Schema 层是一个 CLAUDE.md 文件，定义结构和约定。本仓库在此基础上做了<strong>大幅扩展</strong>——不只是"一个配置文件"，而是一整套技能体系：</p>
+        <table class="mtbl">
+          <thead><tr><th>Karpathy 原始</th><th>本仓库</th></tr></thead>
+          <tbody>
+            <tr><td>一个 Schema 文件</td><td>CLAUDE.md + <strong>15 个 Skills</strong></td></tr>
+            <tr><td>口头指令驱动 LLM</td><td><strong>结构化 Skill 定义</strong>（触发条件、允许工具、工作流）</td></tr>
+            <tr><td>无方法论偏好</td><td><strong>wiki-mode</strong>（Generic / LYT / PARA / Zettelkasten）</td></tr>
+          </tbody>
+        </table>
+        <p>这意味着 LLM 不是被动等待口头指令，而是通过<strong>触发条件自动激活对应的 Skill</strong>——每个 Skill 封装了完整的操作流程和约束。这与 Karpathy "让 LLM 成为有纪律的 Wiki 维护者"的意图完全一致，但实现上更加工程化。</p>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">三种操作 → Skills 映射</h2>
+        <p>Karpathy 定义的三种操作在仓库中都有对应的 Skill 和底层脚本实现：</p>
+        <table class="mtbl">
+          <thead><tr><th>Karpathy 操作</th><th>Skill</th><th>底层脚本</th></tr></thead>
+          <tbody>
+            <tr><td>Ingest（摄取）</td><td><code>/wiki-ingest</code></td><td><code>wiki-lock.sh</code> + <code>allocate-address.sh</code></td></tr>
+            <tr><td>Query（查询）</td><td><code>/wiki-query</code> + <code>/wiki-retrieve</code></td><td><code>retrieve.py</code> → <code>bm25-index.py</code> + <code>contextual-prefix.py</code> + <code>rerank.py</code></td></tr>
+            <tr><td>Lint（整理）</td><td><code>/wiki-lint</code></td><td>lint 检查规则集 + <code>tiling-check.py</code></td></tr>
+          </tbody>
+        </table>
+        <p>此外，仓库还有 Karpathy 未提及但自然延伸出来的操作：<code>/autoresearch</code>（Query 的升级版，WebSearch → WebFetch → 自动合成 → 归档 Wiki）、<code>/save</code>（"good answers filed back" 的精确实现）、<code>/canvas</code>（Obsidian Canvas 可视化画板）、<code>/think</code>（人类思考的框架化）、<code>/defuddle</code>（网页去噪后入 .raw/）。</p>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">index.md + log.md 的扩展</h2>
+        <p>仓库在 Karpathy 的两个导航文件基础上做了两项重要扩展：</p>
+        <table class="mtbl">
+          <thead><tr><th>Karpathy</th><th>本仓库</th><th>增强</th></tr></thead>
+          <tbody>
+            <tr><td>index.md</td><td><code>wiki/index.md</code></td><td>同，按领域/实体/概念/来源/问答分类</td></tr>
+            <tr><td>log.md</td><td><code>wiki/log.md</code></td><td>同，新条目在顶部，前缀格式一致</td></tr>
+            <tr><td>无</td><td><code>wiki/hot.md</code></td><td><strong>新增</strong>：~500 字的近期上下文缓存，所有查询的入口</td></tr>
+            <tr><td>无</td><td><code>/wiki-fold</code></td><td><strong>新增</strong>：日志折叠——将 2ᵏ 条 log 压缩为摘要页</td></tr>
+            <tr><td>qmd（外部工具）</td><td>wiki-retrieve 管线</td><td><strong>自建</strong>：BM25 + jieba + qwen3-embedding rerank</td></tr>
+          </tbody>
+        </table>
+        <p><strong>hot.md 的价值</strong>特别值得说明：Karpathy 的 index.md 是目录，读取它需要解析大量链接。hot.md 是<strong>上下文缓存</strong>——直接告诉 LLM "最近加了什么、现在规模多大、活跃领域是什么"。每次 wiki-query 先读 hot.md，500 字就够判断是否需要深入检索，大大降低了查询的 token 开销。</p>
+      </article>
+
+    </section>
+
+    <!-- ═══════════ TAB 3: 检索管线 ═══════════ -->
+    <section class="tab-panel" id="t3">
+
+      <article class="card">
+        <h2 class="sec-name">contextual-prefix.py — Chunk 切分 + 上下文前缀</h2>
+        <p>离线工具链的第一步：将每篇 Markdown 切分为可检索的 chunk，并为每个 chunk 生成<strong>上下文前缀</strong>——即告诉检索模型"这段话来自哪篇文章、关于什么"。</p>
+        <p><strong>切分逻辑：</strong>正文按 <code>\n\n</code>（空行）切为段落，逐个累加，当累计字符数达到 <code>CHUNK_TARGET_CHARS = 2000</code>（约 500 token）时输出一个 chunk。下一个 chunk 开头回退 200 字符（<code>CHUNK_OVERLAP_CHARS = 200</code>），防止语义被割裂。页面过短（&lt; 2000 字）则单 chunk 输出。</p>
+        <p><strong>前缀生成采用三级架构，自动降级：</strong></p>
+        <table class="mtbl">
+          <thead><tr><th>Tier</th><th>条件</th><th>前缀来源</th><th>数据出境？</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td><code>ANTHROPIC_API_KEY</code> 已设</td><td>Anthropic Haiku API（prompt-cached）</td><td>是（~$12/千页）</td></tr>
+            <tr><td>2</td><td><code>claude</code> 在 PATH</td><td><code>claude -p</code> 子进程</td><td>是（用 CC 订阅额度）</td></tr>
+            <tr><td>3（默认）</td><td>以上都不满足</td><td>页面 title + 第一句话合成</td><td>否，纯本地</td></tr>
+          </tbody>
+        </table>
+        <p>Tier 3 是仓库实际使用的模式——<strong>零成本、纯本地、不需要任何 API key</strong>。合成的前缀虽然不如 LLM 生成的丰富，但已经足够告诉检索模型 chunk 的来源和主题。</p>
+
+        <details>
+          <summary>Tier 3 合成前缀格式与 chunk JSON 结构</summary>
+          <p>Tier 3 合成前缀格式：<code>"This passage is from the wiki page "{标题}". The page opens: {正文第一句话}"</code></p>
+          <p>输出文件（<code>.vault-meta/chunks/&lt;address&gt;/chunk-NNN.json</code>）：</p>
+          <div class="dark-box" data-lang="json">
+            <div class="dt">JSON · chunk 输出结构</div>
+            <div class="dr">
+                      {
+                        "schema_version": 1,
+                        "page_path": "wiki/concepts/gsap-skills.md",
+                        "page_address": "c-000033",
+                        "chunk_index": 0,
+                        "raw_text": "# GSAP Skills\n\n## 定义\n...",
+                        "contextualized_text": "This passage is from... | # GSAP Skills\n...",
+                        "prefix_source": "synthetic",
+                        "char_count": 1487,
+                        "body_hash": "sha256:abc123...",
+                        "page_body_hash": "sha256:def456..."
+                      }
+            </div>
+          </div>
+          <p>增量策略：<code>body_hash</code> / <code>page_body_hash</code> 用于检测内容变化。<code>--all</code> 只重新处理已变更的页面（hash 匹配则跳过），<code>--rebuild</code> 强制全量覆盖。</p>
+          <p><strong>核心切分逻辑：</strong></p>
+          <div class="dark-box" data-lang="python">
+            <div class="dt">PYTHON · chunk_body — 段落边界感知的滑动窗口</div>
+            <div class="dr">
+                      def chunk_body(body, target_chars=2000, overlap=200):
+                          paragraphs = [p.strip() for p in re.split(r"\n\s*\n", body) if p.strip()]
+                          chunks = []
+                          cur = []
+                          cur_len = 0
+                          for p in paragraphs:
+                              cur.append(p)
+                              cur_len += len(p) + 2
+                              if cur_len >= target_chars:
+                                  chunk_text = "\n\n".join(cur)
+                                  chunks.append(chunk_text)
+                                  <span class="tk-cmt"># 下一个 chunk 开头回退 overlap 字符，防止语义割裂</span>
+                                  tail = chunk_text[-overlap:] if overlap > 0 else ""
+                                  cur = [tail] if tail else []
+                                  cur_len = len(tail)
+                          if cur and "".join(cur).strip():
+                              chunks.append("\n\n".join(cur))
+                          return chunks
+            </div>
+          </div>
+          <p>按空行切分段落 → 逐段累加至 2000 字符 → 输出一个 chunk → 回退 200 字符作为下一个 chunk 的种子。页面过短则单 chunk 输出。Tier 3 前缀生成同样简洁：取页面 title 和正文第一句话拼接，纯本地、零成本。</p>
+          <div class="dark-box" data-lang="python">
+            <div class="dt">PYTHON · synthetic_prefix — Tier 3 零成本前缀</div>
+            <div class="dr">
+                      def synthetic_prefix(fm, body, chunk_text):
+                          title = (fm.get("title") or "").strip() or "(untitled)"
+                          first_sentence = re.split(r"(?&lt;=[.!?])\s+", body.strip(), maxsplit=1)
+                          first = first_sentence[0][:300] if first_sentence else ""
+                          return f"This passage is from the wiki page \"{title}\". "
+                                 f"The page opens: {first}"
+            </div>
+          </div>
+        </details>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">bm25-index.py — BM25 倒排索引 + jieba 中文分词</h2>
+        <p><strong>角色：</strong>离线，将 chunk JSON 构建为可搜索的倒排索引。这是检索管线的第一级——<strong>BM25 召回 20 个候选，然后交给 rerank 精选 top-5</strong>。</p>
+        <p>BM25 是经典的稀疏检索算法（Okapi BM25，k1=1.5, b=0.75）。它的核心直觉：词越稀有（高 IDF）权重越高；词频有饱和效应（出现 5 次 vs 50 次差异不大）；长文档有惩罚项（避免长文档霸占结果）。</p>
+
+        <details>
+          <summary>BM25 公式与分词逻辑</summary>
+          <p><strong>BM25 公式：</strong></p>
+          <p><code>Score(q, d) = Σ IDF(term) × [ TF × (k1+1) ] / [ TF + k1 × (1-b + b×dl/avgdl) ]</code></p>
+          <p>其中 <code>IDF = ln(1 + (N - df + 0.5) / (df + 0.5))</code>——N 为总文档数，df 为该词出现的文档数。</p>
+          <p><strong>分词逻辑（<code>tokenize</code>）</strong>——按 Unicode 归属分别处理：<strong>CJK</strong>（U+4E00-U+9FFF 等）字符走 <code>jieba.cut()</code> 分词，过滤单字和纯标点；<strong>非 CJK</strong> 走正则 <code>\w[\w'\-]*</code> 提取词干，过滤 stopwords（a, the, is, …）和单字母。</p>
+          <p>这种<strong>中英文双轨分词</strong>是仓库对中文内容的关键优化——v1.7 原版用 bigram 产生大量垃圾 token，切换 jieba 后词表从 9,466 降到 3,836（0% 垃圾）。</p>
+          <div class="dark-box" data-lang="python">
+            <div class="dt">PYTHON · _append_cjk_tokens — jieba 分词</div>
+            <div class="dr">
+                      def _append_cjk_tokens(tokens, seg):
+                          import jieba
+                          for word in jieba.cut(seg):
+                              word = word.strip()
+                              <span class="tk-cmt"># 过滤单字（太宽泛）和纯标点</span>
+                              if len(word) &lt; 2:
+                                  continue
+                              if all(ch in "，。！？；：""''（）【】《》…—～、・　 "
+                                     or ch.isspace() for ch in word):
+                                  continue
+                              tokens.append(word.lower())
+            </div>
+          </div>
+        </details>
+
+        <details>
+          <summary>索引数据结构与查询流程</summary>
+          <p>索引文件（<code>.vault-meta/bm25/index.json</code>）结构：</p>
+          <div class="dark-box" data-lang="json">
+            <div class="dt">JSON · BM25 索引结构</div>
+            <div class="dr">
+                      {
+                        "doc_count": 115,
+                        "avg_dl": 246.2,
+                        "params": {"k1": 1.5, "b": 0.75},
+                        "vocab": {
+                          "animation": {
+                            "df": 12,
+                            "postings": [["c-000033:0", 5], ["c-000022:0", 3]]
+                          }
+                        },
+                        "docs": {
+                          "c-000033:0": {"path": ".vault-meta/chunks/c-000033/chunk-000.json", "dl": 87}
+                        }
+                      }
+            </div>
+          </div>
+          <p><code>df=12</code> 表示 "animation" 出现在 12 个 chunk 中；<code>["c-000033:0", 5]</code> 表示在 chunk <code>c-000033:0</code> 中出现了 5 次。查询时 <code>bm25-index.py query "text" --top 20</code> 走同样的 tokenize + IDF/TF 算分流程。BM25 索引始终全量重建（纯 Python，115 docs &lt; 1s），通过 <code>fcntl.LOCK_EX</code> 保证并发写入安全。</p>
+          <div class="dark-box" data-lang="python">
+            <div class="dt">PYTHON · BM25 query — IDF/TF 计分</div>
+            <div class="dr">
+                      def query(text, top_k=20):
+                          idx = load_index()
+                          N = idx["doc_count"]
+                          avg_dl = idx["avg_dl"] or 1.0
+                          k1, b = 1.5, 0.75
+                          qterms = tokenize(text)
+                          scores = defaultdict(float)
+                          for term in qterms:
+                              v = vocab.get(term)
+                              if not v: continue
+                              df = v["df"]
+                              idf = math.log(1 + (N - df + 0.5) / (df + 0.5))
+                              for cid, cnt in v["postings"]:
+                                  dl = docs[cid]["dl"]
+                                  denom = cnt + k1 * (1 - b + b * dl / avg_dl)
+                                  scores[cid] += idf * (cnt * (k1 + 1)) / denom
+                          ranked = sorted(scores.items(),
+                                         key=lambda kv: kv[1], reverse=True)[:top_k]
+                          return [{"chunk_id": cid, "score": round(s, 6), ...}
+                                  for cid, s in ranked]
+            </div>
+          </div>
+        </details>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">rerank.py — 语义重排</h2>
+        <p><strong>角色：</strong>在线，被 <code>retrieve.py</code> 作为 Python 模块导入（非子进程）。对 BM25 召回的 20 个候选进行语义重排，返回 top-5。</p>
+        <p><strong>模型配置：</strong>使用 <code>qwen3-embedding:0.6b</code>（600M 参数，中文优化，1024 维向量），通过 Ollama 本地部署。支持双 API 回退：优先 v2 API（<code>/api/embed</code>，qwen3 等新模型需要），回退 v1 API（<code>/api/embeddings</code>，nomic-embed-text 等老模型）。</p>
+        <p><strong>重排流程</strong>清晰简洁：Ollama 探活（3 秒超时）→ embed query → 对每个候选 chunk 查 embed-cache（key = <code>{model}:{body_hash}</code>）→ 未命中则调用 embedding 并写缓存（原子写入：tmp + os.replace）→ 计算 cosine 相似度 → 降序返回 top-N。</p>
+        <div class="ins"><strong>embed-cache 的价值：</strong>chunk 内容不变 → body_hash 不变 → 不重复调用 Ollama。换 embedding 模型时缓存自动失效（key 前缀变了）。首次 ~200ms/chunk，缓存命中 ~0ms。安全守卫：<code>OLLAMA_URL</code> 若非 localhost 地址则拒绝连接——防止数据意外出境。</div>
+
+        <details>
+          <summary>embed_one 双 API 回退与 cosine 相似度</summary>
+          <p>Ollama 的 v1 和 v2 API 返回格式不同——qwen3 等新模型需要 v2 的 <code>/api/embed</code>（返回 <code>{"embeddings": [[...]]}</code>），nomic-embed-text 等老模型走 v1 的 <code>/api/embeddings</code>（返回 <code>{"embedding": [...]}</code>）。实现上优先 v2、异常时回退 v1：</p>
+          <div class="dark-box" data-lang="python">
+            <div class="dt">PYTHON · embed_one — 双 API 自动回退</div>
+            <div class="dr">
+                      def embed_one(url, model, text):
+                          <span class="tk-cmt"># v2 API: /api/embed（qwen3 等新模型）</span>
+                          try:
+                              payload = json.dumps({"model": model, "input": text}).encode("utf-8")
+                              req = urllib.request.Request(f"{url}/api/embed", data=payload, ...)
+                              with urllib.request.urlopen(req, timeout=30) as resp:
+                                  data = json.loads(resp.read())
+                                  embeds = data.get("embeddings") or [[]]
+                                  return embeds[0] if embeds else []
+                          except urllib.error.HTTPError:
+                              pass  <span class="tk-cmt"># 回退到 legacy API</span>
+                          <span class="tk-cmt"># Legacy API: /api/embeddings（nomic-embed-text 等老模型）</span>
+                          payload = json.dumps({"model": model, "prompt": text}).encode("utf-8")
+                          req = urllib.request.Request(f"{url}/api/embeddings", data=payload, ...)
+                          with urllib.request.urlopen(req, timeout=30) as resp:
+                              return json.loads(resp.read()).get("embedding") or []
+            </div>
+          </div>
+          <p>Cosine 计算干净利落——不到 10 行，无外部依赖：</p>
+          <div class="dark-box" data-lang="python">
+            <div class="dt">PYTHON · cosine — 向量相似度</div>
+            <div class="dr">
+                      def cosine(a, b):
+                          if not a or not b or len(a) != len(b):
+                              return 0.0
+                          dot = sum(x * y for x, y in zip(a, b))
+                          na = math.sqrt(sum(x * x for x in a))
+                          nb = math.sqrt(sum(y * y for y in b))
+                          if na == 0 or nb == 0:
+                              return 0.0
+                          return dot / (na * nb)
+            </div>
+          </div>
+        </details>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">retrieve.py — 查询编排器</h2>
+        <p><strong>角色：</strong>在线，wiki-query 调用的唯一入口。<strong>零子进程架构</strong>——用 <code>importlib</code> 把 <code>bm25-index.py</code> 和 <code>rerank.py</code> 作为 Python 模块动态导入，一次查询只有一次 Python 进程启动。</p>
+        <p>完整执行流程：</p>
+        <div class="flow-steps">
+          <div class="flow-step"><div class="num">1</div><div class="fs-text"><strong>前置检查</strong>——BM25 索引不存在或 chunks 目录不存在 → exit 10 → wiki-query 回退 v1.6 翻页模式</div></div>
+          <div class="flow-step"><div class="num">2</div><div class="fs-text"><strong>动态导入</strong>——<code>importlib</code> 导入 bm25_index 和 rerank 兄弟脚本（非子进程）</div></div>
+          <div class="flow-step"><div class="num">3</div><div class="fs-text"><strong>BM25 召回</strong>——<code>bm25.query(query, top_k=20)</code> 获取候选池</div></div>
+          <div class="flow-step"><div class="num">4</div><div class="fs-text"><strong>加载 chunk</strong>——读取每个命中的 chunk JSON，提取 <code>contextualized_text</code> 和 snippet（前 200 字）</div></div>
+          <div class="flow-step"><div class="num">5</div><div class="fs-text"><strong>Rerank</strong>——<code>reranker.rerank(query, candidates, top_k=5)</code> 语义精选</div></div>
+          <div class="flow-step"><div class="num">6</div><div class="fs-text"><strong>去重输出</strong>——按 <code>page_address</code> 去重（同一页多个 chunk 只留最高分）→ 输出 JSON</div></div>
+        </div>
+
+        <details>
+          <summary>完整参数表与 Windows Git Bash 编码修复</summary>
+          <table class="mtbl">
+            <thead><tr><th>参数</th><th>默认</th><th>含义</th></tr></thead>
+            <tbody>
+              <tr><td><code>--top</code></td><td>5</td><td>最终返回条数</td></tr>
+              <tr><td><code>--bm25-top</code></td><td>20</td><td>BM25 候选池大小</td></tr>
+              <tr><td><code>--no-rerank</code></td><td>false</td><td>跳过 rerank，纯 BM25</td></tr>
+              <tr><td><code>--explain</code></td><td>false</td><td>输出诊断信息</td></tr>
+            </tbody>
+          </table>
+          <p><strong>Windows Git Bash 编码修复（<code>_fix_argv_encoding</code>）：</strong>Git Bash 可能将 UTF-8 参数按 ANSI 解码导致中文乱码。该函数通过 latin-1 字节回退再 UTF-8 重解码修复。这是仓库在 Windows 环境下反复踩坑后沉淀的工程经验。</p>
+          <p><strong>零子进程架构的核心——<code>import_sibling</code>：</strong>用 <code>importlib</code> 将带连字符的 <code>.py</code> 文件名动态加载为 Python 模块对象，避免子进程开销：</p>
+          <div class="dark-box" data-lang="python">
+            <div class="dt">PYTHON · import_sibling — 零子进程模块导入</div>
+            <div class="dr">
+                      def import_sibling(name, filename):
+                          target = SCRIPTS_DIR / filename
+                          if not target.is_file():
+                              log(f"ERR: sibling helper {filename} not found")
+                              sys.exit(EXIT_NOT_PROVISIONED)
+                          spec = importlib.util.spec_from_file_location(name, target)
+                          mod = importlib.util.module_from_spec(spec)
+                          spec.loader.exec_module(mod)
+                          return mod
+            </div>
+          </div>
+          <p>一次查询只启动一次 Python 进程——BM25 查询毫秒级，rerank 耗时主要取决于 Ollama embedding 速度。相比子进程方案，避免了每次调用的进程创建/销毁和序列化开销。</p>
+        </details>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">辅助脚本：tiling-check.py + Shell 工具</h2>
+        <p><strong>tiling-check.py（语义平铺检测）：</strong>离线运行，使用与 rerank.py 相同的 embedding 接口检测 Wiki 中语义重复的页面对。cosine ≥ 0.90 → 严重重复；0.80–0.90 → 建议人工检查。阈值配置在 <code>.vault-meta/tiling-thresholds.json</code>，按模型区分。</p>
+        <p>两个关键的 Shell 脚本支撑了整个写操作的并发安全：</p>
+        <table class="mtbl">
+          <thead><tr><th>脚本</th><th>作用</th><th>关键细节</th></tr></thead>
+          <tbody>
+            <tr><td><code>wiki-lock.sh</code></td><td>并发写锁</td><td><code>fcntl</code> 排他锁，非阻塞。所有写操作前必须 acquire</td></tr>
+            <tr><td><code>allocate-address.sh</code></td><td>DragonScale 地址分配</td><td>原子操作，读 counter → 返回 <code>c-XXXXXX</code> → 计数器 +1</td></tr>
+            <tr><td><code>setup-retrieve.sh</code></td><td>一键初始化检索管线</td><td>检查脚本 → 建目录 → 探 ollama → contextual-prefix → BM25 build → smoke test</td></tr>
+            <tr><td><code>setup-dragonscale.sh</code></td><td>DragonScale 基础设施初始化</td><td>创建 counter、manifest、legacy-pages.txt、tiling-thresholds.json</td></tr>
+          </tbody>
+        </table>
+
+        <details>
+          <summary>tiling-check.py — 嵌入循环与缓存逻辑</summary>
+          <p>核心循环对每个 wiki 页面计算 embedding 并检测语义重复。通过 body_hash 判断内容是否变化，命中缓存则跳过昂贵的 embedding 调用：</p>
+          <div class="dark-box" data-lang="python">
+            <div class="dt">PYTHON · run_check — 缓存感知的嵌入循环</div>
+            <div class="dr">
+                      for md in sorted(WIKI_DIR.rglob("*.md")):
+                          text = md.read_text(encoding="utf-8")
+                          fm, body = parse_frontmatter(text)
+                          rel = md.relative_to(VAULT_ROOT).as_posix()
+                          h = body_hash(body, model)    <span class="tk-cmt"># sha256(model + body)</span>
+                          entry = cache["embeddings"].get(rel)
+                          if entry and entry.get("hash") == h:
+                              pages.append((rel, entry["embedding"]))  <span class="tk-cmt"># 缓存命中</span>
+                              cached_hits += 1
+                              continue
+                          emb = embed(body, model, ollama_url)  <span class="tk-cmt"># 调用 ollama</span>
+                          cache["embeddings"][rel] = {"hash": h, "embedding": emb}
+                          pages.append((rel, emb))
+                          computed += 1
+            </div>
+          </div>
+          <p>随后对 page 做 O(n²) 的 cosine 交叉比对——cosine ≥ 0.90 标记为严重重复，0.80–0.90 建议人工检查。缓存使后续运行大幅加速：首次 ~N 次 ollama 调用，之后仅重新嵌入有变化的页面。</p>
+        </details>
+      </article>
+
+    </section>
+
+    <!-- ═══════════ TAB 4: 技能协作 ═══════════ -->
+    <section class="tab-panel" id="t4">
+
+      <article class="card">
+        <h2 class="sec-name">核心三操作详解</h2>
+        <p>Karpathy 的 Ingest / Query / Lint 在仓库中对应三个最核心的 Skill，每个都有完整的 subagent 架构和细致的工程考量：</p>
+
+        <p><strong><code>/wiki-ingest</code> — 摄取：</strong>每个来源独立派一个 subagent（<code>claude-obsidian:wiki-ingest</code>），可并行处理多个文件。单次摄取的完整触达范围印证了 Karpathy 说的 "a single source might touch 10–15 wiki pages"：</p>
+        <div class="flow-steps">
+          <div class="flow-step"><div class="num">→</div><div class="fs-text"><code>wiki/sources/&lt;slug&gt;.md</code> ← 来源摘要页（新建）</div></div>
+          <div class="flow-step"><div class="num">→</div><div class="fs-text"><code>wiki/concepts/&lt;Concept&gt;.md</code> ← 提取的概念（新建或更新）</div></div>
+          <div class="flow-step"><div class="num">→</div><div class="fs-text"><code>wiki/entities/&lt;Entity&gt;.md</code> ← 提取的实体（新建或更新）</div></div>
+          <div class="flow-step"><div class="num">→</div><div class="fs-text"><code>wiki/index.md</code> ← 追加索引条目</div></div>
+          <div class="flow-step"><div class="num">→</div><div class="fs-text"><code>wiki/log.md</code> ← 顶部追加操作日志</div></div>
+          <div class="flow-step"><div class="num">→</div><div class="fs-text"><code>wiki/hot.md</code> ← 更新近期上下文缓存</div></div>
+          <div class="flow-step"><div class="num">→</div><div class="fs-text">子索引（<code>_index.md</code>）+ <code>.raw/.manifest.json</code> ← 记录摄取状态</div></div>
+        </div>
+        <p>所有写操作前通过 <code>wiki-lock.sh acquire</code> 获取排他锁，避免并行 ingest 冲突。</p>
+
+        <p><strong><code>/wiki-query</code> — 查询：</strong>设计了三档深度以适应不同场景：</p>
+        <table class="mtbl">
+          <thead><tr><th>模式</th><th>触发</th><th>读取范围</th><th>Token 预算</th></tr></thead>
+          <tbody>
+            <tr><td>Quick</td><td>简单事实查询</td><td>hot.md + index.md</td><td>~1,500</td></tr>
+            <tr><td>Standard（默认）</td><td>大多数问题</td><td>hot.md + retrieve.py top-5</td><td>~3,000</td></tr>
+            <tr><td>Deep</td><td>"comprehensive" / "tell me everything"</td><td>hot.md + retrieve.py + 全面阅读</td><td>~8,000+</td></tr>
+          </tbody>
+        </table>
+        <p>标准流程：<code>Read(hot.md)</code> → <code>retrieve.py query</code>（BM25 + rerank）→ <code>Read(candidate pages)</code> → 综合回答（带 <code>[[wikilink]]</code> 引用）→ 建议归档。当 retrieve.py 不可用时自动回退 v1.6 手动翻页模式。</p>
+
+        <p><strong><code>/wiki-lint</code> — 健康检查：</strong>派 subagent 做全库扫描，检查维度包括：孤儿页面（0 入链）、死链接、过期声明、缺失交叉引用、Frontmatter 缺失、空 section、语义重复（通过 tiling-check.py）。</p>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">扩展操作（一）：autoresearch + save</h2>
+        <p><strong><code>/autoresearch</code> — 自主研究循环：</strong>灵感来自 Karpathy 的 autoresearch 模式。通过可配置的 <code>program.md</code> 定义研究目标，循环运行直到达到深度。</p>
+        <p><strong>三轮架构：</strong></p>
+        <div class="flow-steps">
+          <div class="flow-step"><div class="num">1</div><div class="fs-text"><strong>Broad search（广撒网）</strong>——topic 分解为 3–5 个搜索角度，每个 2–3 次 WebSearch，取 top 2–3 结果 WebFetch，提取观点、实体、概念、矛盾</div></div>
+          <div class="flow-step"><div class="num">2</div><div class="fs-text"><strong>Gap fill（补缺口）</strong>——识别 Round 1 的缺失和矛盾，至多 5 次针对性搜索 → WebFetch → 补充</div></div>
+          <div class="flow-step"><div class="num">3</div><div class="fs-text"><strong>Synthesis check（可选）</strong>——如果仍有重大矛盾或缺口 → 再一轮；否则 → 开始归档</div></div>
+        </div>
+        <p>归档产物覆盖 sources、concepts、entities、questions 四类页面，然后更新 index、log、hot。预算约 3 轮 × 5 来源 × 3 角度 ≈ 45 次 WebFetch。v1.8.2+ 增加了内容安全措施——剥离 <code>&lt;script&gt;</code>、<code>&lt;iframe&gt;</code>、<code>&lt;style&gt;</code>，转义 <code>[[</code> 和 <code>]]</code>（防 wikilink 注入），拒绝正文中的 frontmatter 分隔符。</p>
+
+        <p><strong><code>/save</code> — 保存对话洞察：</strong>Karpathy 原话 "good answers filed back into the wiki" 的精确实现。触发词 "save this" / "保存这个" → 分析当前对话 → 判定内容类型（概念/问答/会话/见解）→ 生成 YAML frontmatter → 按 wiki-mode 路由到目标目录 → 更新 index + log + hot。</p>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">扩展操作（二）：canvas + think + wiki-fold + wiki-mode</h2>
+        <p><strong><code>/canvas</code> — 可视化画板：</strong>底层使用 Obsidian 的 <code>.canvas</code> JSON 文件（遵循 <a href="https://jsoncanvas.org" target="_blank" rel="noopener">jsoncanvas.org</a> 开放标准）。结构简洁——节点 {id, type, x, y, width, height, color} + 边 {fromNode, toNode} + 分组 {type: "group", label}。默认画布 <code>wiki/canvases/main.canvas</code>，zone 自动分区。</p>
+
+        <p><strong><code>/think</code> — 十原则思考循环：</strong>把 Karpathy 说的人类角色——"think about what it all means"——框架化。8 个检查点：OBSERVE → LISTEN → THINK → CONNECT → FEEL → ACCEPT → CREATE → GROW，确保不跳步、不自欺、不回避不确定性。</p>
+
+        <p><strong><code>/wiki-fold</code> — 日志折叠：</strong>log.md 积累太多条目时，把最近的 2ᵏ 条压缩成摘要页。双模式：dry-run（stdout 预览）和 commit（Write/Edit 写盘）。fold 是纯增量操作，不修改或删除原始 log。</p>
+
+        <p><strong><code>/wiki-mode</code> — 方法论路由：</strong>支持四种知识组织方法论——Generic（默认）、PARA、LYT、Zettelkasten。wiki-ingest、save、autoresearch 在创建页面前会调 <code>wiki-mode.py route &lt;type&gt; "&lt;topic&gt;"</code> 获取目标路径，确保不同方法论下的文件落在正确位置。</p>
+
+        <details>
+          <summary>wiki-mode 路由示例：不同方法论对同一内容类型的路径映射</summary>
+          <table class="mtbl">
+            <thead><tr><th>内容类型</th><th>Generic</th><th>PARA</th><th>LYT</th><th>Zettelkasten</th></tr></thead>
+            <tbody>
+              <tr><td>新来源</td><td><code>wiki/sources/foo.md</code></td><td><code>wiki/resources/&lt;topic&gt;/foo.md</code></td><td><code>wiki/notes/foo.md</code> + 更新 MOC</td><td><code>wiki/&lt;ID&gt;-foo.md</code></td></tr>
+              <tr><td>新概念</td><td><code>wiki/concepts/Name.md</code></td><td><code>wiki/resources/concepts/Name.md</code></td><td><code>wiki/notes/Name.md</code> + concept MOC</td><td><code>wiki/&lt;ID&gt;-name.md</code></td></tr>
+            </tbody>
+          </table>
+        </details>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">辅助 Skills 体系</h2>
+        <p>除了核心和扩展操作，仓库还有一组辅助 Skills 覆盖工具链的各个环节：</p>
+        <table class="mtbl">
+          <thead><tr><th>Skill</th><th>用途</th><th>底层</th></tr></thead>
+          <tbody>
+            <tr><td><code>/obsidian-markdown</code></td><td>Obsidian Flavored Markdown 语法参考</td><td>纯知识，无脚本</td></tr>
+            <tr><td><code>/obsidian-bases</code></td><td>创建/编辑 Obsidian <code>.base</code> 文件</td><td>读写 <code>.base</code> JSON</td></tr>
+            <tr><td><code>/defuddle</code></td><td>网页去噪——去广告/导航/页脚</td><td><code>defuddle-cli</code> (npm)</td></tr>
+            <tr><td><code>/wiki-cli</code></td><td>读写 vault 的传输层</td><td>自动选 obsidian-cli / MCP / filesystem</td></tr>
+            <tr><td><code>/claude-obsidian:save</code></td><td><code>/save</code> 的别名</td><td>同 save</td></tr>
+          </tbody>
+        </table>
+        <p>这组 Skills 体现了仓库的设计哲学——<strong>每个工具只做一件事，但做得很透彻</strong>。obsidian-markdown 提供语法参考（不执行任何操作），wiki-cli 提供传输抽象（适配多种后端），defuddle 负责来源清洗（确保进入 .raw/ 的是干净内容）。</p>
+      </article>
+
+    </section>
+
+    <!-- ═══════════ TAB 5: 全景回顾 ═══════════ -->
+    <section class="tab-panel" id="t5">
+
+      <article class="card">
+        <h2 class="sec-name">关键技术决策</h2>
+        <p>仓库在工程实现过程中做了几个值得展开讨论的技术决策：</p>
+
+        <p><strong>中文优先的检索栈：</strong>从 v1.7 的 bigram + nomic-embed-text 切换到 jieba + qwen3-embedding 是一次彻底的升级。实测效果：qwen3 将相关页面得分提升 7–8%，不相关页面压低 9–16%，区分度显著优于 nomic-embed-text（137M，英文优先）。</p>
+
+        <div class="cmp">
+          <div class="cmp-s pain"><div class="st">v1.7 原版</div><ul><li>Bigram 分词：词表 9,466 / 80% 垃圾</li><li>nomic-embed-text (137M, 英文优先)</li><li>768 维向量</li><li>/api/embeddings（旧 API）</li></ul></div>
+          <div class="cmp-s goal"><div class="st">当前版本</div><ul><li>Jieba + Qwen3：词表 3,836 / 0% 垃圾</li><li>qwen3-embedding (600M, 中文优化)</li><li>1024 维向量</li><li>/api/embed（新 API），双 API 回退</li></ul></div>
+        </div>
+
+        <p><strong>零子进程查询：</strong><code>retrieve.py</code> 用 <code>importlib</code> 动态导入 BM25 和 rerank 模块，一次查询只有一次 Python 进程启动。BM25 查询毫秒级，rerank 耗时主要在 Ollama embedding（首次 ~200ms/chunk，缓存命中 ~0ms）。</p>
+
+        <p><strong>三层回退保障：</strong>ollama 可达 + 模型已 pull → BM25 + cosine rerank（最优）→ ollama 不可达 → BM25 only（可用）→ BM25 索引不存在 → exit 10 → wiki-query 退 v1.6 翻页（兜底）。任一层失效都不影响基本功能。</p>
+
+        <details>
+          <summary>缓存层与增量更新机制</summary>
+          <table class="mtbl">
+            <thead><tr><th>缓存</th><th>位置</th><th>失效条件</th></tr></thead>
+            <tbody>
+              <tr><td>embed-cache</td><td><code>.vault-meta/embed-cache.json</code></td><td>换 embedding 模型</td></tr>
+              <tr><td>jieba 字典缓存</td><td><code>%TEMP%/jieba.cache</code></td><td>jieba 升级时自动重建</td></tr>
+              <tr><td>ollama 模型内存</td><td>GPU/CPU RAM</td><td>最后请求后 5 分钟自动释放</td></tr>
+            </tbody>
+          </table>
+          <p>增量更新策略——chunks：只处理 page_body_hash 变化的页面（<code>--all</code> 增量，<code>--rebuild</code> 全量）；BM25 索引：始终全量重建（廉价，&lt; 1s）。</p>
+        </details>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">核心哲学对照</h2>
+        <p>Karpathy 文章中的每一句核心表述，在本仓库中都有具体的工程实现对应：</p>
+        <table class="mtbl">
+          <thead><tr><th>Karpathy 的表述</th><th>本仓库的体现</th></tr></thead>
+          <tbody>
+            <tr><td>"Knowledge is compiled once, then kept current"</td><td>contextual-prefix.py 建 chunk → BM25 索引，增量更新</td></tr>
+            <tr><td>"The wiki is a persistent, compounding artifact"</td><td>98 页 → 115 chunks → 每次查询在既有索引上复用</td></tr>
+            <tr><td>"Good answers filed back into the wiki"</td><td><code>/save</code> 将对话洞察归档为结构化页面</td></tr>
+            <tr><td>"Cross-references already exist. Contradictions already flagged."</td><td>Wiki-links 天然交叉引用；wiki-lint 健康检查发现矛盾</td></tr>
+            <tr><td>"The human curates sources; the LLM handles everything else"</td><td>人把内容放 .raw/；LLM 负责 ingest、索引、维护</td></tr>
+            <tr><td>"Obsidian is the IDE; the LLM is the programmer"</td><td>Obsidian 浏览 + Claude Code 操作 + scripts/ 工具链</td></tr>
+            <tr><td>"The tedious part isn't reading or thinking — it's the bookkeeping"</td><td>15 个 skills 自动化全部簿记：每 ingest 触 10–15 页</td></tr>
+            <tr><td>"Works surprisingly well at moderate scale"</td><td>v1.6 手动翻 index；v1.7+ 自建混合检索</td></tr>
+            <tr><td>"Bush's Memex — connections as valuable as documents"</td><td>wikilinks + graph view + frontmatter + DragonScale 永久地址</td></tr>
+            <tr><td>"The LLM can help you vibe-code a search script"</td><td>自建 6 个 Python 脚本 + 2 个 Shell 脚本，覆盖检索全链路</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">架构全景图</h2>
+        <p>下面这张全景图展示了三层架构的完整布局——从最底层的原始文档到最上层的自动化技能，以及横跨各层的离线工具链：</p>
+        <div class="pano">
+          <!-- Layer 1 -->
+          <div class="pano-layer">
+            <div class="pl-tag">Layer 1</div>
+            <div class="pl-name">.raw/</div>
+            <div class="pl-desc">原始文档（不可变）：视频转录、GitHub README、网页抓取</div>
+            <div class="pl-note">人放入，LLM 只读</div>
+          </div>
+
+          <div class="pano-arrow">
+            <div class="pa-line"></div>
+            <div class="pa-label">/wiki-ingest</div>
+            <div class="pa-head"></div>
+          </div>
+
+          <!-- Layer 2 -->
+          <div class="pano-layer">
+            <div class="pl-tag">Layer 2</div>
+            <div class="pl-name">wiki/</div>
+            <div class="pl-grid">
+              <div class="pli">sources/ <em>← 来源摘要（36 页）</em></div>
+              <div class="pli">concepts/ <em>← 概念、框架（38 页）</em></div>
+              <div class="pli">entities/ <em>← 人物、组织（13 页）</em></div>
+              <div class="pli">questions/ <em>← 问答归档</em></div>
+              <div class="pli">index.md <em>← 主目录</em></div>
+              <div class="pli">log.md <em>← 操作日志（只追加）</em></div>
+              <div class="pli pl-full">hot.md <em>← 近期上下文缓存</em></div>
+            </div>
+            <div class="pl-sub">离线索引层</div>
+            <div class="pl-grid">
+              <div class="pli">.vault-meta/chunks/ <em>← 115 chunks</em></div>
+              <div class="pli">.vault-meta/bm25/ <em>← 倒排索引, 3,836 vocab</em></div>
+              <div class="pli pl-full">.vault-meta/embed-cache.json <em>← 嵌入向量缓存</em></div>
+            </div>
+          </div>
+
+          <div class="pano-arrow">
+            <div class="pa-line"></div>
+            <div class="pa-label">configures</div>
+            <div class="pa-head"></div>
+          </div>
+
+          <!-- Layer 3 -->
+          <div class="pano-layer">
+            <div class="pl-tag">Layer 3</div>
+            <div class="pl-name">CLAUDE.md + skills/</div>
+            <div class="pl-desc">核心：wiki-ingest / wiki-query / wiki-retrieve / wiki-lint</div>
+            <div class="pl-desc">扩展：autoresearch / save / canvas / think / wiki-fold / wiki-mode / defuddle / obsidian-markdown / obsidian-bases / wiki-cli</div>
+          </div>
+
+          <!-- Toolchain -->
+          <div class="pano-divider"></div>
+          <div class="pano-tools-title">离线工具链（6 Python + 2 Shell）</div>
+          <div class="pano-tools">
+            <div class="pt">contextual-prefix.py <span>→ chunk 切分 + 3-tier 前缀</span></div>
+            <div class="pt">bm25-index.py <span>→ BM25 倒排索引（jieba 分词）</span></div>
+            <div class="pt">rerank.py <span>→ 语义重排（qwen3-embedding）</span></div>
+            <div class="pt">retrieve.py <span>→ 查询编排器（零子进程）</span></div>
+            <div class="pt">tiling-check.py <span>→ DragonScale 语义平铺</span></div>
+            <div class="pt">wiki-mode.py <span>→ 方法论路由</span></div>
+            <div class="pt">wiki-lock.sh <span>→ fcntl 并发写锁</span></div>
+            <div class="pt">allocate-address.sh <span>→ DragonScale 全局自增地址</span></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">总结</h2>
+        <div class="summary">
+          <strong>这篇文章梳理了什么：</strong>
+          <ul>
+            <li>Karpathy LLM Wiki Pattern 的完整思想——为什么传统 RAG 不累积，以及三层架构如何解决这个问题</li>
+            <li>本仓库如何将三层架构精确映射为目录结构（.raw/ → wiki/ → CLAUDE.md + skills/）</li>
+            <li>离线检索管线的完整设计——contextual-prefix → BM25 → rerank → retrieve，每一步的参数和数据结构</li>
+            <li>15 个 Skills 的架构与协作——核心三操作 + 扩展操作 + 辅助工具</li>
+            <li>关键技术决策——中文优先、零子进程、三层回退、缓存策略</li>
+          </ul>
+        </div>
+        <blockquote>Karpathy 画了蓝图，本仓库是蓝图的一个完整施工实例。从 "读 index 翻页" 到 "BM25 召回 20 + embedding 语义重排"，从 "手动 web search" 到 "3 轮循环自动归档"，每个环节都有实际的代码实现。每个脚本的参数、数据结构、回退策略都在本文档中有据可查。</blockquote>
+        <p>本仓库基于 <a href="https://github.com/AgriciDaniel/claude-obsidian" target="_blank" rel="noopener">AgriciDaniel/claude-obsidian</a> 改进而来，在其 Obsidian + Claude Code 集成的基础上，加入了中文优先的混合检索管线（BM25 + jieba + qwen3-embedding）、设计兼容Windows系统的脚本和三层回退保障。这些工程增强都围绕同一个目标：<strong>将成熟的工具以正确的方式组织在一起</strong>，让 LLM 从"一次性问答机器"变成"持续复利的知识库管理者"。这正是 Karpathy 说的——维护成本趋近于零，知识持续积累。</p>
+      </article>
+
+    </section>
+
+  </main>
+
+  <!-- ── References ── -->
+  <section class="refs">
+    <h2>参考</h2>
+    <ul>
+      <li><a href="https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f" target="_blank" rel="noopener">Andrej Karpathy — LLM Wiki (gist)</a></li>
+      <li><a href="https://jsoncanvas.org" target="_blank" rel="noopener">JSON Canvas — 开放标准</a></li>
+      <li><a href="https://github.com/tobi/qmd" target="_blank" rel="noopener">qmd — 本地 Markdown 搜索引擎</a></li>
+      <li><a href="https://en.wikipedia.org/wiki/Memex" target="_blank" rel="noopener">Vannevar Bush — Memex (1945)</a></li>
+    </ul>
+  </section>
+
+  <!-- ── Scripts ── -->
+  <script>
+    /* ── Tab switching ── */
+    document.querySelectorAll('.tab-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var t = this.dataset.t;
+        document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.toggle('active', b === btn); });
+        document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.toggle('active', p.id === t); });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    });
+
+    /* ── Dark-box indent stripping ── */
+    (function(){
+      document.querySelectorAll('.dark-box .dr').forEach(function(el){
+        var lines = el.innerHTML.split('\n');
+        if (lines.length <= 1) return;
+        var base = null;
+        for (var i = 0; i < lines.length; i++) {
+          var t = lines[i].trim();
+          if (t.length > 0) { base = lines[i].length - t.length; break; }
+        }
+        if (!base) return;
+        el.innerHTML = lines.map(function(l) { return l.slice(base); }).join('\n').trim();
+      });
+    })();
+  </script>
+
+</body>
+</html>
