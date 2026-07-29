@@ -498,7 +498,7 @@
     <div class="eyebrow">A COMMAND'S JOURNEY</div>
     <h1>从 <code>ls</code> 到屏幕上的文件名</h1>
     <p class="sub">沿着输入、解析、程序加载、目录读取与输出渲染的路径，理解终端模拟器、Shell、内核和 CPU 如何完成一次协作。</p>
-    <div class="meta"><span>2026-07-29</span><span>x86-64 Linux</span><span>GNU ls</span></div>
+    <div class="meta"><span>x86-64 Linux</span><span>GNU ls</span></div>
     <div class="rule"></div>
   </header>
 
@@ -755,6 +755,8 @@
           panel.classList.toggle('active', panel.id === target);
         });
         if (moveFocus) button.focus();
+        var behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+        window.scrollTo({ top: 0, behavior: behavior });
       }
 
       buttons.forEach(function(button, index) {
