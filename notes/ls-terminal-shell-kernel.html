@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="沿着 ls 的输入、解析、加载、系统调用与输出路径，理解终端、Shell、内核和 CPU 如何协作。">
+  <title>从 ls 到屏幕上的文件名：一条命令如何穿过终端、Shell 与内核</title>
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&amp;family=DM+Sans:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #3f7277;
+      --primary-active: #28555a;
+      --copper: #b86f52;
+      --ink: #171817;
+      --body: #3f403d;
+      --body-strong: #252624;
+      --muted: #6f706b;
+      --muted-soft: #8d8c85;
+      --hairline: #dedbd3;
+      --hairline-soft: #ebe7de;
+      --canvas: #f8f7f2;
+      --surface: #fffdf8;
+      --surface-soft: #f0f3f0;
+      --surface-warm: #f4ede5;
+      --surface-dark: #171b1b;
+      --on-dark: #f7f6f0;
+      --on-dark-soft: #b9c0bd;
+      --font-display: 'Cormorant Garamond', Garamond, 'Times New Roman', serif;
+      --font-body: 'DM Sans', Inter, -apple-system, 'PingFang SC', 'Segoe UI', sans-serif;
+      --font-code: 'JetBrains Mono', ui-monospace, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      min-height: 100vh;
+      color: var(--body);
+      background-color: var(--canvas);
+      background-image:
+        linear-gradient(rgba(63, 114, 119, .035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(63, 114, 119, .035) 1px, transparent 1px);
+      background-size: 32px 32px;
+      font-family: var(--font-body);
+      -webkit-font-smoothing: antialiased;
+    }
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0 0 auto;
+      z-index: 200;
+      height: 2px;
+      background: linear-gradient(90deg, var(--primary) 0 58%, var(--copper) 58% 72%, var(--hairline) 72% 100%);
+      pointer-events: none;
+    }
+    a { color: var(--primary-active); }
+    code { font-family: var(--font-code); }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 48px;
+      padding: 12px 28px;
+      border-bottom: 1px solid rgba(37, 38, 36, .1);
+      background: rgba(248, 247, 242, .92);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      font-size: 13px;
+    }
+    .topbar .back {
+      color: var(--muted);
+      font-weight: 500;
+      text-decoration: none;
+      transition: color .18s ease, transform .18s ease;
+    }
+    .topbar .back:hover { color: var(--primary-active); }
+    .topbar .back:active { transform: translateX(-2px); }
+    .topbar .sep { width: 1px; height: 14px; background: var(--hairline); }
+    .topbar .tag {
+      color: var(--muted-soft);
+      font-family: var(--font-code);
+      font-size: 11px;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .hero {
+      position: relative;
+      z-index: 1;
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 64px 28px 34px;
+      text-align: center;
+      animation: fade-up .5s ease-out both;
+    }
+    .hero .eyebrow {
+      margin-bottom: 18px;
+      color: var(--primary-active);
+      font-family: var(--font-code);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0;
+    }
+    .hero h1 {
+      max-width: 880px;
+      margin: 0 auto 20px;
+      color: var(--ink);
+      font-family: var(--font-display);
+      font-size: 52px;
+      font-weight: 600;
+      letter-spacing: 0;
+      line-height: 1.08;
+    }
+    .hero h1 code {
+      color: var(--primary-active);
+      font-family: var(--font-code);
+      font-size: .72em;
+      font-weight: 500;
+    }
+    .hero .sub {
+      max-width: 760px;
+      margin: 0 auto;
+      color: var(--muted);
+      font-size: 17px;
+      line-height: 1.75;
+    }
+    .hero .meta {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      margin-top: 18px;
+      color: var(--muted-soft);
+      font-family: var(--font-code);
+      font-size: 11px;
+    }
+    .hero .rule {
+      width: min(100%, 520px);
+      height: 1px;
+      margin: 28px auto 0;
+      background: linear-gradient(90deg, transparent, var(--primary), var(--copper), transparent);
+    }
+
+    .tabs-wrap {
+      position: sticky;
+      top: 48px;
+      z-index: 99;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      width: min(920px, calc(100% - 48px));
+      margin: 0 auto 10px;
+      padding: 8px;
+      overflow-x: auto;
+      border: 1px solid rgba(37, 38, 36, .12);
+      border-radius: 8px;
+      background: rgba(255, 253, 248, .92);
+      box-shadow: 0 12px 34px rgba(49, 54, 51, .07);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+    }
+    .tab-btn {
+      flex: 0 0 auto;
+      min-height: 38px;
+      padding: 8px 16px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      color: var(--muted);
+      background: transparent;
+      font-family: var(--font-body);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: color .18s ease, background .18s ease, border-color .18s ease;
+      white-space: nowrap;
+    }
+    .tab-btn:hover { color: var(--ink); border-color: var(--hairline); }
+    .tab-btn.active {
+      color: #fff;
+      border-color: var(--primary);
+      background: var(--primary);
+    }
+    .tab-arrow { flex: 0 0 auto; padding: 0 3px; color: var(--copper); font-size: 13px; }
+
+    .content {
+      position: relative;
+      z-index: 1;
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 30px 24px 76px;
+    }
+    .tab-panel { display: none; animation: fade-up .3s ease-out both; }
+    .tab-panel.active { display: block; }
+    .card {
+      max-width: 100%;
+      margin-bottom: 18px;
+      padding: 34px 38px;
+      border: 1px solid rgba(37, 38, 36, .11);
+      border-radius: 8px;
+      background: rgba(255, 253, 248, .96);
+      box-shadow: 0 18px 52px rgba(49, 54, 51, .06);
+    }
+    .sec-name {
+      margin-bottom: 18px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid var(--hairline);
+      color: var(--ink);
+      font-family: var(--font-display);
+      font-size: 30px;
+      font-weight: 600;
+      letter-spacing: 0;
+      line-height: 1.12;
+    }
+    .sec-name::before {
+      content: '';
+      display: block;
+      width: 54px;
+      height: 3px;
+      margin-bottom: 14px;
+      background: linear-gradient(90deg, var(--primary) 0 70%, var(--copper) 70% 100%);
+    }
+    .card h3 {
+      margin: 24px 0 10px;
+      color: var(--body-strong);
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 0;
+    }
+    .card p {
+      margin-bottom: 12px;
+      color: var(--body);
+      font-size: 15px;
+      line-height: 1.78;
+    }
+    .card p:last-child { margin-bottom: 0; }
+    .card p strong { color: var(--body-strong); }
+    .card ul, .card ol {
+      margin: 8px 0 14px 22px;
+      color: var(--body);
+      font-size: 14px;
+      line-height: 1.75;
+    }
+    .card li { margin-bottom: 7px; padding-left: 3px; }
+    .card a { text-decoration-thickness: 1px; text-underline-offset: 3px; }
+
+    .summary {
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 22px;
+      align-items: start;
+      margin-top: 18px;
+      padding: 18px 20px;
+      border-left: 3px solid var(--primary);
+      background: var(--surface-soft);
+    }
+    .summary strong { color: var(--ink); font-size: 14px; }
+    .summary ul { margin: 0 0 0 18px; }
+    .summary li { margin-bottom: 4px; }
+    .ins {
+      max-width: 100%;
+      margin: 16px 0;
+      padding: 15px 18px;
+      border: 1px solid var(--hairline);
+      border-left: 3px solid var(--copper);
+      border-radius: 6px;
+      color: var(--muted);
+      background: var(--surface-warm);
+      font-size: 14px;
+      line-height: 1.68;
+    }
+    .ins strong { color: var(--ink); }
+
+    .path {
+      display: flex;
+      align-items: stretch;
+      max-width: 100%;
+      margin: 20px 0;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      border: 1px solid var(--hairline);
+      background: var(--surface-soft);
+    }
+    .path-node {
+      flex: 1 0 132px;
+      min-width: 0;
+      padding: 18px 14px;
+      border-right: 1px solid var(--hairline);
+      text-align: left;
+    }
+    .path-node:last-child { border-right: 0; }
+    .path-node .pn {
+      margin-bottom: 5px;
+      color: var(--copper);
+      font-family: var(--font-code);
+      font-size: 10px;
+    }
+    .path-node .pname { color: var(--ink); font-size: 13px; font-weight: 600; }
+    .path-node .pdesc { margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+
+    .signal {
+      margin: 18px 0;
+      border: 1px solid var(--hairline);
+      background: #fff;
+    }
+    .signal-row {
+      display: grid;
+      grid-template-columns: 115px 1fr 115px;
+      min-width: 620px;
+      border-bottom: 1px solid var(--hairline-soft);
+    }
+    .signal-row:last-child { border-bottom: 0; }
+    .signal-row > div { padding: 13px 16px; font-size: 12px; line-height: 1.5; }
+    .signal-row .side { color: var(--primary-active); font-family: var(--font-code); font-weight: 500; }
+    .signal-row .wire { color: var(--muted); background: var(--surface-soft); text-align: center; }
+
+    .dark-box {
+      max-width: 100%;
+      margin: 15px 0;
+      padding: 20px 22px;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      border: 1px solid rgba(255, 255, 255, .08);
+      border-radius: 8px;
+      color: var(--on-dark);
+      background: var(--surface-dark);
+    }
+    .dark-box .dt {
+      margin-bottom: 10px;
+      color: #84b9bb;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0;
+    }
+    .dark-box .dr {
+      color: var(--on-dark-soft);
+      font-family: var(--font-code);
+      font-size: 12px;
+      line-height: 1.75;
+      tab-size: 2;
+      white-space: pre;
+    }
+    .dark-box .hl { color: #f0b095; }
+    .dark-box .tk-kw { color: #9bc8ca; }
+    .dark-box .tk-cmt { color: #7e8985; font-style: italic; }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      margin: 18px 0;
+      border: 1px solid var(--hairline);
+    }
+    .two-col > * { min-width: 0; padding: 20px; }
+    .two-col > * + * { border-left: 1px solid var(--hairline); }
+    .two-col h3 { margin: 0 0 10px; color: var(--primary-active); font-size: 14px; }
+    .two-col p { margin: 0; color: var(--muted); font-size: 13px; }
+
+    .mtbl-wrap { max-width: 100%; margin: 16px 0; overflow-x: auto; overscroll-behavior-x: contain; }
+    .mtbl {
+      width: 100%;
+      min-width: 620px;
+      border: 1px solid var(--hairline);
+      border-collapse: collapse;
+      background: #fff;
+      font-size: 13px;
+    }
+    .mtbl th {
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--hairline);
+      color: var(--ink);
+      background: var(--surface-soft);
+      font-weight: 600;
+      text-align: left;
+    }
+    .mtbl td {
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--hairline-soft);
+      color: var(--body);
+      vertical-align: top;
+    }
+    .mtbl tr:last-child td { border-bottom: 0; }
+
+    .chain {
+      counter-reset: chain;
+      margin: 18px 0 0;
+      list-style: none;
+    }
+    .chain li {
+      counter-increment: chain;
+      position: relative;
+      margin: 0;
+      padding: 12px 14px 12px 52px;
+      border-top: 1px solid var(--hairline-soft);
+    }
+    .chain li:last-child { border-bottom: 1px solid var(--hairline-soft); }
+    .chain li::before {
+      content: counter(chain, decimal-leading-zero);
+      position: absolute;
+      left: 12px;
+      top: 13px;
+      color: var(--primary-active);
+      font-family: var(--font-code);
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    details { margin: 14px 0; }
+    details > summary {
+      padding: 9px 0;
+      border-bottom: 1px solid var(--hairline-soft);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      list-style: none;
+    }
+    details > summary::-webkit-details-marker { display: none; }
+    details > summary::before {
+      content: '›';
+      display: inline-block;
+      width: 16px;
+      color: var(--copper);
+      transition: transform .2s ease;
+    }
+    details[open] > summary::before { transform: rotate(90deg); }
+    details[open] > :not(summary) { animation: detail-reveal .25s ease-out both; }
+    details p { margin-top: 10px; color: var(--muted); font-size: 13px; }
+
+    .refs { margin: 0; columns: 2; column-gap: 34px; }
+    .refs li {
+      break-inside: avoid;
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .refs a { overflow-wrap: anywhere; }
+
+    .card, .dark-box, .ins, .path, .mtbl { max-width: 100%; }
+    p, code, .ins, .path-node { overflow-wrap: anywhere; }
+    .tab-btn:focus-visible, .topbar a:focus-visible, .card a:focus-visible, summary:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 3px;
+    }
+
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes detail-reveal {
+      from { opacity: 0; transform: translateY(-6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 760px) {
+      .topbar { padding: 11px 16px; }
+      .topbar .tag { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .hero { padding: 46px 18px 28px; }
+      .hero h1 { font-size: 38px; }
+      .hero .sub { font-size: 15px; }
+      .hero .meta { flex-wrap: wrap; gap: 8px 14px; }
+      .tabs-wrap { top: 46px; justify-content: flex-start; width: calc(100% - 24px); padding: 7px; }
+      .tab-btn { padding: 8px 12px; }
+      .content { padding: 24px 12px 56px; }
+      .card { padding: 24px 17px; }
+      .sec-name { font-size: 26px; }
+      .summary { grid-template-columns: 1fr; gap: 8px; }
+      .two-col { grid-template-columns: 1fr; }
+      .two-col > * + * { border-top: 1px solid var(--hairline); border-left: 0; }
+      .signal { overflow-x: auto; }
+      .refs { columns: 1; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: .01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <a class="back" href="../index.html">&larr; 首页</a>
+    <div class="sep"></div>
+    <span class="tag">System · Terminal / Shell / Kernel</span>
+  </div>
+
+  <header class="hero">
+    <div class="eyebrow">A COMMAND'S JOURNEY</div>
+    <h1>从 <code>ls</code> 到屏幕上的文件名</h1>
+    <p class="sub">沿着输入、解析、程序加载、目录读取与输出渲染的路径，理解终端模拟器、Shell、内核和 CPU 如何完成一次协作。</p>
+    <div class="meta"><span>2026-07-29</span><span>x86-64 Linux</span><span>GNU ls</span></div>
+    <div class="rule"></div>
+  </header>
+
+  <nav class="tabs-wrap" role="tablist" aria-label="文章阶段">
+    <button type="button" class="tab-btn active" id="tab-input" role="tab" aria-selected="true" aria-controls="input" data-t="input">问题与输入</button>
+    <span class="tab-arrow" aria-hidden="true">&rarr;</span>
+    <button type="button" class="tab-btn" id="tab-launch" role="tab" aria-selected="false" aria-controls="launch" tabindex="-1" data-t="launch">进程与加载</button>
+    <span class="tab-arrow" aria-hidden="true">&rarr;</span>
+    <button type="button" class="tab-btn" id="tab-output" role="tab" aria-selected="false" aria-controls="output" tabindex="-1" data-t="output">输出与回顾</button>
+  </nav>
+
+  <main class="content">
+    <section class="tab-panel active" id="input" role="tabpanel" aria-labelledby="tab-input">
+      <article class="card">
+        <h2 class="sec-name">一条命令，六个协作者</h2>
+        <p>从 Ubuntu 换到 macOS，最明显的变化之一是默认 Shell 从常见的 Bash 变成了 Zsh；但 <code>cd</code>、<code>ls</code>、管道和重定向依旧熟悉。Apple 也将 Zsh 记录为 macOS Catalina 及之后新建用户账户的默认登录 Shell。<a href="https://support.apple.com/guide/terminal/change-the-default-shell-trml113/mac">[1]</a></p>
+        <p>真正值得展开的是按下回车后的短短一瞬：终端模拟器接收输入，Shell 赋予文本语法，C 运行库发起系统调用，内核提供进程、内存与文件系统服务，CPU 则在不同执行上下文中推进机器指令。</p>
+        <div class="path" role="img" aria-label="从按键到屏幕的高层路径">
+          <div class="path-node"><div class="pn">01</div><div class="pname">键盘</div><div class="pdesc">事件与编码</div></div>
+          <div class="path-node"><div class="pn">02</div><div class="pname">终端</div><div class="pdesc">窗口与 PTY</div></div>
+          <div class="path-node"><div class="pn">03</div><div class="pname">Shell</div><div class="pdesc">解析与查找</div></div>
+          <div class="path-node"><div class="pn">04</div><div class="pname">内核</div><div class="pdesc">进程与文件</div></div>
+          <div class="path-node"><div class="pn">05</div><div class="pname">GNU ls</div><div class="pdesc">排序与格式化</div></div>
+          <div class="path-node"><div class="pn">06</div><div class="pname">屏幕</div><div class="pdesc">字形与像素</div></div>
+        </div>
+        <div class="summary">
+          <strong>本文的边界</strong>
+          <ul>
+            <li>x86-64 Linux、GUI 终端模拟器、交互式 Shell 与 GNU <code>ls</code>。</li>
+            <li>macOS 的高层结构相似，但 Darwin/XNU、ARM64 与 Mach-O 的加载和系统调用细节不同。<a href="https://developer.apple.com/documentation/apple-silicon/porting-your-macos-apps-to-apple-silicon">[2]</a> <a href="https://developer.apple.com/library/archive/documentation/Performance/Conceptual/CodeFootprint/Articles/MachOOverview.html">[3]</a></li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">最终执行者始终是 CPU</h2>
+        <p>“Shell 解析命令”或“内核读取目录”都是叙述上的压缩。物理层面，某个逻辑核心正在执行对应地址空间中的机器指令；指令读取寄存器和内存中的数据，再沿不同分支继续。x86-64 把架构可见的指令指针称为 <code>RIP</code>。</p>
+        <div class="two-col">
+          <div>
+            <h3>用户态进程</h3>
+            <p>Shell、终端模拟器和 <code>ls</code> 都有各自的虚拟地址空间，其中映射可执行代码、共享库、堆、栈和运行数据。</p>
+          </div>
+          <div>
+            <h3>内核执行环境</h3>
+            <p>系统调用、异常和中断通过受控入口转入内核；内核代码在受保护的权限上下文中管理进程与硬件资源。</p>
+          </div>
+        </div>
+        <p>普通编译程序的代码页通常以只读方式映射，文件支持的页面可以按需进入物理内存。进程阻塞时，没有核心替它继续执行，但其内存与进程状态仍由系统保存。Linux 内核文档对虚拟内存、页表、页缓存和缺页处理给出了这一模型的基础。<a href="https://www.kernel.org/doc/html/latest/admin-guide/mm/concepts.html">[14]</a></p>
+        <div class="ins"><strong>关键结论：</strong>键盘输入是数据。它改变已有程序的参数、分支和处理结果；普通 Shell 命令不会临时生成一套全新的机器指令。</div>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">终端不是 Shell</h2>
+        <p>一个命令行窗口里至少有两个用户态程序：终端模拟器管理窗口、字体、颜色、光标和键盘事件；Shell 显示提示符、编辑命令行、解析语法并组织其他程序运行。两者通常通过一对伪终端，也就是 PTY，交换字节。<a href="https://man7.org/linux/man-pages/man7/pty.7.html">[4]</a></p>
+        <div class="signal" role="img" aria-label="终端模拟器、PTY 与 Shell 的双向数据流">
+          <div class="signal-row"><div class="side">终端模拟器</div><div class="wire">字节 → PTY master → PTY slave →</div><div class="side">Shell</div></div>
+          <div class="signal-row"><div class="side">终端模拟器</div><div class="wire">← PTY master ← PTY slave ←</div><div class="side">Shell / ls</div></div>
+        </div>
+        <p>终端模拟器持有 master 端，Shell 的标准输入、标准输出和标准错误通常连接到 slave 端。Linux TTY 层的 line discipline 负责输入队列、特殊控制字符与 canonical mode 等处理。<a href="https://www.kernel.org/doc/html/latest/driver-api/tty/tty_ldisc.html">[5]</a></p>
+        <p>按键事件抵达有焦点的终端窗口后，终端结合键盘布局、修饰键和输入法生成字节并写入 master。Shell 一侧的 Readline 或 ZLE 一类行编辑器处理历史、光标、删除与补全；TTY 可以按 canonical mode 组织整行输入，也可以在 noncanonical mode 下交给行编辑器逐字符处理。<a href="https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap11.html">[6]</a> <a href="https://www.gnu.org/software/bash/manual/html_node/Readline-Interaction.html">[7]</a></p>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name"><code>ls</code> 最初只是一段文本</h2>
+        <p>回车被行编辑器接受后，Shell 才得到字符串 <code>ls</code>。它先完成词法分析、语法解析和必要的展开，再判断命令名究竟指向 alias、Shell 函数、builtin，还是 <code>$PATH</code> 中的外部可执行文件。</p>
+        <p>下面两条命令可以直接询问当前 Bash 如何解释 <code>ls</code>：</p>
+        <div class="dark-box" data-lang="shell">
+          <div class="dt">SHELL · 命令解析检查</div>
+          <div class="dr">
+            <span class="hl">type ls</span>
+            <span class="hl">command -V ls</span>
+          </div>
+        </div>
+        <p><code>type</code> 描述名称作为命令时的解释方式，<code>command -V</code> 也会输出描述。Bash 在函数和 builtin 均未命中后搜索 <code>$PATH</code>，并用哈希表缓存已找到的外部程序路径。<a href="https://www.gnu.org/software/bash/manual/html_node/Command-Search-and-Execution.html">[8]</a></p>
+        <p><code>cd</code> 则说明 builtin 为什么必要：当前工作目录属于进程自身状态，必须由当前 Shell 修改。本文后续假设没有同名 alias 或函数，<code>ls</code> 最终解析为外部程序；Shell 随后为它准备参数、环境变量、文件描述符、当前目录与重定向，这组状态构成 Bash 所说的独立执行环境。<a href="https://www.gnu.org/software/bash/manual/html_node/Command-Execution-Environment.html">[9]</a></p>
+      </article>
+    </section>
+
+    <section class="tab-panel" id="launch" role="tabpanel" aria-labelledby="tab-launch">
+      <article class="card">
+        <h2 class="sec-name">Shell 为外部命令建立执行环境</h2>
+        <p>经典 Unix 模型先创建子进程，再让子进程换上一套新的程序映像。实际实现可以使用 <code>fork</code>、<code>vfork</code>、<code>clone</code> 或 <code>posix_spawn</code> 一类机制；从 Shell 语义看，前台外部命令获得独立环境，而父 Shell 保留自己的状态并等待任务完成。</p>
+        <div class="dark-box" data-lang="text">
+          <div class="dt">PROCESS · 经典 fork / exec 路径</div>
+          <div class="dr">
+            父 Shell <span class="tk-kw">--fork/spawn--&gt;</span> 子进程 <span class="tk-kw">--execve--&gt;</span> ls 程序映像
+                 <span class="tk-cmt">\-- 等待前台任务，并维护作业状态</span>
+          </div>
+        </div>
+        <p>在经典 <code>fork</code> 模型里，子进程最初继承父进程的大量状态。随后调用 <code>execve</code>，以新程序替换当前程序映像；成功后不会返回原调用点。父 Shell 则在另一个进程中收集退出状态并恢复提示符。<a href="https://man7.org/linux/man-pages/man2/fork.2.html">[10]</a> <a href="https://man7.org/linux/man-pages/man2/execve.2.html">[11]</a></p>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">从 libc 进入内核</h2>
+        <p>Shell 通常通过 libc 的 <code>execve()</code> 包装函数发起请求。限定在 Linux x86-64 原生系统调用 ABI：系统调用号放进 <code>rax</code>，前三个参数依次放进 <code>rdi</code>、<code>rsi</code>、<code>rdx</code>，<code>execve</code> 的系统调用号是 59，底层包装代码随后执行 <code>syscall</code> 指令。系统调用表可直接在 Linux 内核源码中核对。<a href="https://github.com/torvalds/linux/blob/master/arch/x86/entry/syscalls/syscall_64.tbl">[12]</a></p>
+        <div class="mtbl-wrap">
+          <table class="mtbl">
+            <thead><tr><th>寄存器</th><th>内容</th><th>本例</th></tr></thead>
+            <tbody>
+              <tr><td><code>rax</code></td><td>系统调用号</td><td><code>59</code></td></tr>
+              <tr><td><code>rdi</code></td><td>第 1 个参数</td><td>可执行文件路径</td></tr>
+              <tr><td><code>rsi</code></td><td>第 2 个参数</td><td>参数数组</td></tr>
+              <tr><td><code>rdx</code></td><td>第 3 个参数</td><td>环境变量数组</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>这组约定只适用于 Linux x86-64；Linux ARM64、macOS ARM64 等平台有各自的 ABI。执行 <code>syscall</code> 时，CPU 按预先配置的入口转入内核：下一条用户态指令地址进入 <code>RCX</code>，标志进入 <code>R11</code>，控制流转到内核入口。Intel 手册定义了这条指令的体系结构语义。<a href="https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html">[13]</a></p>
+        <div class="ins"><strong>不只是改写 RIP：</strong>系统调用入口同时受硬件权限转换和入口规则约束；内核入口代码还要建立内核栈与寄存器上下文。单独跳到一个内核地址不会给用户态代码带来内核权限。</div>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">内核搭起新的程序映像</h2>
+        <p><code>execve</code> 的路径、参数数组和环境变量数组最初仍位于用户空间。内核把它们当作需要验证的用户地址，在权限和边界检查后读取所需数据，再沿文件系统解析路径、检查执行权限并识别可执行文件格式。<a href="https://man7.org/linux/man-pages/man2/execve.2.html">[11]</a></p>
+        <p>对常见的动态链接 ELF 程序，program headers 描述需要映射的段及其读、写、执行权限。内核创建新的虚拟地址空间布局，放入代码段、数据段、初始栈、参数、环境变量和 auxiliary vector；<code>PT_INTERP</code> 指定的动态加载器也进入新映像。</p>
+        <div class="path" role="img" aria-label="从 execve 到 ls main 函数的加载路径">
+          <div class="path-node"><div class="pn">01</div><div class="pname">路径解析</div><div class="pdesc">权限与格式</div></div>
+          <div class="path-node"><div class="pn">02</div><div class="pname">ELF 映射</div><div class="pdesc">段与虚拟地址</div></div>
+          <div class="path-node"><div class="pn">03</div><div class="pname">动态加载器</div><div class="pdesc">共享库与重定位</div></div>
+          <div class="path-node"><div class="pn">04</div><div class="pname">C 运行时</div><div class="pdesc">启动环境</div></div>
+          <div class="path-node"><div class="pn">05</div><div class="pname">ls main</div><div class="pdesc">参数与业务逻辑</div></div>
+        </div>
+        <p>这里的关键是建立虚拟内存区域与文件之间的映射，而不是一次性把整个程序复制进连续物理内存。文件页可以由页缓存支持，在首次访问时通过 demand paging 装入；动态加载器完成共享库映射、重定位和符号解析后，C 运行时最终调用 <code>ls</code> 的 <code>main</code>。<a href="https://www.kernel.org/doc/html/latest/admin-guide/mm/concepts.html">[14]</a></p>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">同一条链上还穿插着缺页与调度</h2>
+        <p><code>RIP</code> 提供架构可见的控制流线索，但它不是全部状态。特权级、栈、通用寄存器和当前地址空间共同决定当前代码以什么身份、能访问哪些数据。CPU 内部还会运用流水线、乱序执行、推测执行和缓存，在提交结果时维持指令集规定的可观察行为。</p>
+        <p>内存访问持续经过地址翻译，TLB 缓存近期结果，页表保存更完整的虚拟地址映射。访问尚未装入的文件页、懒分配页或写时复制页时会产生 page fault；内核可以装入页面、分配物理页或更新映射。若用户态访问无法满足，通常会转化为 <code>SIGSEGV</code> 等信号。<a href="https://www.kernel.org/doc/html/latest/mm/page_tables.html">[17]</a></p>
+        <p>任务阻塞、被唤醒、主动让出或到达调度时机时，调度器可以选择另一个任务运行。上下文切换保存并恢复指令位置、寄存器、栈、地址空间和其他架构状态。Linux 的 NO_HZ 配置还允许部分 CPU 在空闲或只有一个可运行任务时省去周期性 scheduling tick。<a href="https://www.kernel.org/doc/html/latest/timers/no_hz.html">[18]</a></p>
+        <div class="ins"><strong>控制流并非直线：</strong><code>ls</code> 运行期间可能因系统调用、page fault、硬件中断和调度多次进入内核，也可能暂时让出 CPU，之后再从保存的上下文继续。</div>
+      </article>
+    </section>
+
+    <section class="tab-panel" id="output" role="tabpanel" aria-labelledby="tab-output">
+      <article class="card">
+        <h2 class="sec-name"><code>ls</code> 读取目录，但不包办一切</h2>
+        <p>进入 <code>main</code> 后，<code>ls</code> 解析参数，确定目标目录和输出格式。目录数据由内核文件系统提供，因此程序会在用户态计算与内核服务之间多次往返。一次普通 Linux 目录列表大致包含以下动作：</p>
+        <ol>
+          <li>打开目标目录。</li>
+          <li>通过 <code>getdents64</code> 一类系统调用取得目录项。</li>
+          <li>按选项、文件系统能力和颜色规则，通过 <code>stat</code>、<code>statx</code> 一类接口补充元数据。</li>
+          <li>在用户态比较文件名、排序并计算输出布局。</li>
+          <li>通过 <code>write</code> 写入标准输出，最后关闭资源并退出。</li>
+        </ol>
+        <p>这里必须保留“可能”和“一类”的限定：实际调用随 GNU Coreutils 版本、命令选项和文件系统变化。<code>getdents64</code> 是读取目录项的 Linux 接口；GNU Coreutils 手册也指出，某些颜色规则会要求额外获取文件状态。<a href="https://man7.org/linux/man-pages/man2/getdents.2.html">[15]</a> <a href="https://www.gnu.org/software/coreutils/manual/html_node/General-output-formatting.html">[16]</a></p>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">用户态负责格式，内核负责资源</h2>
+        <p>把 <code>ls</code> 看成“内核命令”会模糊职责边界。它是用户态程序：排序、列宽计算、颜色选择和文本格式化主要由进程自身完成；只有涉及目录、元数据、文件描述符和输出设备时，才通过系统调用请求内核服务。</p>
+        <div class="mtbl-wrap">
+          <table class="mtbl">
+            <thead><tr><th>阶段</th><th>主要位置</th><th>典型工作</th></tr></thead>
+            <tbody>
+              <tr><td>命令解析</td><td>Shell 用户态</td><td>展开、查找、重定向、作业控制</td></tr>
+              <tr><td>资源访问</td><td>Linux 内核</td><td>目录项、元数据、文件描述符、虚拟内存</td></tr>
+              <tr><td>列表生成</td><td><code>ls</code> 用户态</td><td>比较、排序、列布局、文本与颜色格式</td></tr>
+              <tr><td>屏幕呈现</td><td>终端模拟器用户态</td><td>解析字符与转义序列、排版、绘制字形</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>GNU Coreutils 文档明确说明，<code>ls</code> 的默认输出布局取决于标准输出是否为终端：终端通常使用分栏布局，非终端输出通常按每行一个名称处理。<a href="https://www.gnu.org/software/coreutils/manual/html_node/General-output-formatting.html">[16]</a></p>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">字节沿 PTY 返回屏幕</h2>
+        <p><code>ls</code> 把格式化后的文件名、换行以及可能的 ANSI 转义序列写入标准输出。标准输出连接终端时，字节进入 PTY slave，终端模拟器从 master 端读取并解析，更新字符网格、光标与颜色，再调用字体和图形系统把字形绘制成像素。</p>
+        <p>重定向不会改写 <code>ls</code> 的核心输出调用，只会在进程启动前改变标准输出文件描述符的去向：</p>
+        <div class="dark-box" data-lang="shell">
+          <div class="dt">SHELL · 改变标准输出目的地</div>
+          <div class="dr">
+            <span class="hl">ls &gt; files.txt</span>
+          </div>
+        </div>
+        <p>此时 <code>ls</code> 仍通过标准输出写字节，但数据进入 <code>files.txt</code>，终端模拟器不再收到这一部分内容。Bash 的执行环境与重定向规则决定了文件描述符在外部命令启动时已经就位。<a href="https://www.gnu.org/software/bash/manual/html_node/Command-Execution-Environment.html">[9]</a></p>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">从按键到提示符：十步回顾</h2>
+        <ol class="chain">
+          <li>输入栈把 <code>l</code>、<code>s</code> 和回车的按键事件交给终端模拟器。</li>
+          <li>终端把编码后的字节写入 PTY master，Shell 的行编辑器从 slave 一侧读取。</li>
+          <li>Shell 接受命令行，完成解析、展开和命令查找，定位外部 <code>ls</code>。</li>
+          <li>Shell 建立独立执行环境；经典模型创建子进程，父 Shell 管理前台任务。</li>
+          <li>子进程通过 <code>execve</code> 进入内核，以 <code>ls</code> 替换程序映像。</li>
+          <li>内核解析 ELF，建立虚拟内存布局，并准备动态加载器、参数、环境和初始栈。</li>
+          <li>动态加载器和运行时初始化完成，<code>ls</code> 开始执行；所需页面可以按需进入物理内存。</li>
+          <li><code>ls</code> 请求目录项和元数据，在用户态完成排序与格式化，再写入标准输出。</li>
+          <li>输出沿 PTY 回到终端模拟器，被解析、排版并渲染成屏幕上的文件名。</li>
+          <li><code>ls</code> 退出，父 Shell 收集退出状态，重新显示提示符。</li>
+        </ol>
+        <div class="ins"><strong>主线：</strong>输入是数据，Shell 赋予它语法，内核赋予程序资源，CPU 在不同上下文中推进指令，终端最终把输出变回可见文字。</div>
+      </article>
+
+      <article class="card">
+        <h2 class="sec-name">参考资料</h2>
+        <ol class="refs">
+          <li id="ref-mac-shell"><a href="https://support.apple.com/guide/terminal/change-the-default-shell-trml113/mac">Apple Support：Change the default shell in Terminal on Mac</a></li>
+          <li id="ref-apple-silicon"><a href="https://developer.apple.com/documentation/apple-silicon/porting-your-macos-apps-to-apple-silicon">Apple Developer：Porting your macOS apps to Apple silicon</a></li>
+          <li id="ref-macho"><a href="https://developer.apple.com/library/archive/documentation/Performance/Conceptual/CodeFootprint/Articles/MachOOverview.html">Apple Developer：Overview of the Mach-O Executable Format</a></li>
+          <li id="ref-pty"><a href="https://man7.org/linux/man-pages/man7/pty.7.html">Linux man-pages：pty(7)</a></li>
+          <li id="ref-tty"><a href="https://www.kernel.org/doc/html/latest/driver-api/tty/tty_ldisc.html">Linux Kernel Documentation：TTY Line Discipline</a>；另见 <a href="https://www.kernel.org/doc/html/latest/driver-api/tty/n_tty.html">N_TTY</a></li>
+          <li id="ref-posix-terminal"><a href="https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap11.html">The Open Group：General Terminal Interface</a></li>
+          <li id="ref-readline"><a href="https://www.gnu.org/software/bash/manual/html_node/Readline-Interaction.html">GNU Bash Reference Manual：Readline Interaction</a></li>
+          <li id="ref-bash-search"><a href="https://www.gnu.org/software/bash/manual/html_node/Command-Search-and-Execution.html">GNU Bash Reference Manual：Command Search and Execution</a></li>
+          <li id="ref-bash-env"><a href="https://www.gnu.org/software/bash/manual/html_node/Command-Execution-Environment.html">GNU Bash Reference Manual：Command Execution Environment</a></li>
+          <li id="ref-fork"><a href="https://man7.org/linux/man-pages/man2/fork.2.html">Linux man-pages：fork(2)</a></li>
+          <li id="ref-execve"><a href="https://man7.org/linux/man-pages/man2/execve.2.html">Linux man-pages：execve(2)</a></li>
+          <li id="ref-syscall-table"><a href="https://github.com/torvalds/linux/blob/master/arch/x86/entry/syscalls/syscall_64.tbl">Linux kernel source：x86-64 system call table</a></li>
+          <li id="ref-intel"><a href="https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html">Intel：Intel 64 and IA-32 Architectures Software Developer's Manuals</a></li>
+          <li id="ref-mm"><a href="https://www.kernel.org/doc/html/latest/admin-guide/mm/concepts.html">Linux Kernel Documentation：Memory Management Concepts Overview</a></li>
+          <li id="ref-getdents"><a href="https://man7.org/linux/man-pages/man2/getdents.2.html">Linux man-pages：getdents(2)</a></li>
+          <li id="ref-ls-color"><a href="https://www.gnu.org/software/coreutils/manual/html_node/General-output-formatting.html">GNU Coreutils Manual：General output formatting</a></li>
+          <li id="ref-page-tables"><a href="https://www.kernel.org/doc/html/latest/mm/page_tables.html">Linux Kernel Documentation：Page Tables</a></li>
+          <li id="ref-nohz"><a href="https://www.kernel.org/doc/html/latest/timers/no_hz.html">Linux Kernel Documentation：NO_HZ: Reducing Scheduling-Clock Ticks</a></li>
+        </ol>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    (function() {
+      document.querySelectorAll('a[href^="https://"]').forEach(function(link) {
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+      });
+
+      document.querySelectorAll('.dark-box .dr').forEach(function(block) {
+        var lines = block.innerHTML.split('\n');
+        var base = null;
+        lines.some(function(line) {
+          var trimmed = line.trim();
+          if (!trimmed) return false;
+          base = line.length - line.trimStart().length;
+          return true;
+        });
+        if (base) {
+          block.innerHTML = lines.map(function(line) { return line.slice(base); }).join('\n').trim();
+        }
+      });
+
+      var buttons = Array.prototype.slice.call(document.querySelectorAll('.tab-btn'));
+      var panels = Array.prototype.slice.call(document.querySelectorAll('.tab-panel'));
+
+      function activate(button, moveFocus) {
+        var target = button.getAttribute('data-t');
+        buttons.forEach(function(item) {
+          var selected = item === button;
+          item.classList.toggle('active', selected);
+          item.setAttribute('aria-selected', String(selected));
+          item.setAttribute('tabindex', selected ? '0' : '-1');
+        });
+        panels.forEach(function(panel) {
+          panel.classList.toggle('active', panel.id === target);
+        });
+        if (moveFocus) button.focus();
+      }
+
+      buttons.forEach(function(button, index) {
+        button.addEventListener('click', function() { activate(button, false); });
+        button.addEventListener('keydown', function(event) {
+          var next = index;
+          if (event.key === 'ArrowRight') next = (index + 1) % buttons.length;
+          if (event.key === 'ArrowLeft') next = (index - 1 + buttons.length) % buttons.length;
+          if (next !== index) {
+            event.preventDefault();
+            activate(buttons[next], true);
+          }
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
