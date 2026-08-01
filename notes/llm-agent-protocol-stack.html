@@ -611,7 +611,7 @@
 
       <div class="card">
         <div class="sec-name">厂商格式：事实标准的分化</div>
-        <p>Tool Use 是 <strong>de facto standard（事实标准）</strong>——各家 LLM 厂商都支持，但具体格式是各自设计的。没有 ISO 规范，只有"大家都这么干"：</p>
+        <p>Tool Use 是 <strong>de facto standard（事实标准）</strong>——Anthropic / OpenAI / Google 都支持，但具体格式是各自设计的。没有 ISO 规范，只有"大家都这么干"：</p>
         <table class="mtbl">
           <thead>
             <tr><th>概念</th><th>Anthropic</th><th>OpenAI</th><th>Gemini</th></tr>
@@ -661,7 +661,7 @@
 
       <div class="card">
         <div class="sec-name">三种协议，一条主线</div>
-        <p>当前主流的 LLM 对话 API 其实只有三家格式值得掌握——其中 OpenAI 一家就占了两代：</p>
+        <p>我自己接触的 LLM 对话 API 里，有三套格式绕不开——其中 OpenAI 一家就占了两代：</p>
         <table class="mtbl">
           <thead>
             <tr><th>协议</th><th>端点</th><th>定位</th></tr>
@@ -672,8 +672,8 @@
             <tr><td>Anthropic Messages</td><td><code>POST /v1/messages</code></td><td>Anthropic 唯一一套格式，Claude Code 使用</td></tr>
           </tbody>
         </table>
-        <p>三套格式的差异集中在<strong>请求体组织方式、工具调用编码、返回结构</strong>三个维度。好消息是：简单场景下三家的请求体长得几乎一样（messages 数组 + role），迁移成本远比想象的低——OpenAI 官方迁移指南里，<code>chat.completions.create</code> 改一行 <code>responses.create</code> 就能跑通简单对话。</p>
-        <div class="ins">为什么 OpenAI 要推第二套？因为 Responses 把"对话"升级成了"任务"：输出不再只是一段文本，而是包含推理、工具调用、搜索结果的结构化 <code>output</code> 数组，并且引入了服务端状态。它不是修修补补，是重新设计——详见下文与「各家格式」末尾的拓展。</div>
+        <p>三套格式的差异集中在<strong>请求体组织方式、工具调用编码、返回结构</strong>三个维度。好消息是：简单场景下三家的请求体长得几乎一样（messages 数组 + role），迁移成本不高——OpenAI 官方迁移指南里，<code>chat.completions.create</code> 改一行 <code>responses.create</code> 就能跑通简单对话。</p>
+        <div class="ins">为什么 OpenAI 要推第二套？因为 Responses 把"对话"升级成了"任务"：输出不再只是一段文本，而是包含推理、工具调用、搜索结果的结构化 <code>output</code> 数组，并且引入了服务端状态——这些能力目前都只在 Responses 上迭代。详见下文与「各家格式」末尾的拓展。</div>
       </div>
 
       <div class="card">
