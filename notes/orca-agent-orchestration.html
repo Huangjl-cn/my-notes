@@ -620,6 +620,7 @@
 
       <div class="card">
         <div class="sec-name">Worker 的三类上行信号</div>
+        <p><strong><code>send</code> 不是 worker 专属</strong>——它只是「往信箱写一条消息」的通用命令，协调者与 worker 都能用，但惯用方向不同：协调者主要用 <code>worker-start</code> / <code>dispatch</code>（派活）、<code>reply</code>（回 worker 的问题）、<code>terminal send</code>（实时指令），真正用 <code>send</code> 的场景是广播 status 或给某个 worker 单独指导（<code>--to dispatch:&lt;id&gt;</code>）；worker 则几乎只能靠 <code>send</code> 上报——<code>--type worker_done</code> / <code>heartbeat</code> 没有替代命令。边界在于：<code>worker_done</code> / <code>heartbeat</code> 是 <strong>Dispatch 级信号</strong>，必须由被派发的 worker 发（带 task-id / dispatch-id，校验 assignee 匹配），且不能发 group；协调者发 <code>status</code> 类消息则无此限制。</p>
         <p>除了普通的 <code>send</code> 状态消息，worker 还有三类上行信号。它们语义不同，且各自有独立的表/字段支持：</p>
         <table class="mtbl">
           <thead>
@@ -850,6 +851,8 @@
             <tr><td><code>term_xxx</code>（handle）</td><td><code>legacy_direct</code></td><td>轻量；绑定终端生命周期，接收方只能只读查看（提示 reply and acknowledgment are unavailable）</td></tr>
           </tbody>
         </table>
+        <p><strong>注意 <code>--run</code> 与 <code>--to</code> 是两个维度</strong>：<code>--run run_xxx</code> 声明这条消息<strong>归属于哪个 Run</strong>（写进 <code>messages.run_id</code>，决定记账/审计范围，可省略——默认取当前终端绑定的 Run）；<code>--to</code> 才是<strong>投递到哪个信箱</strong>（写进 <code>to_handle</code>，决定谁能 check 到）。投 Run 信箱时两者是同一个 run id：<code>--run run_abc --to run:run_abc</code>（一个裸写、一个带 <code>run:</code> 前缀）。</p>
+        <p><code>send</code> 成功后的返回值带两类 ID，用途不同：<code>result.message.id</code>（如 <code>msg_41ded8606b77</code>）是<strong>单条消息 ID</strong>，供 <code>reply --id</code> / <code>ask --resume</code> 定位；<code>check</code> 返回的 <code>result.deliveryId</code>（如 <code>delivery_f9b63ee878ca</code>）是<strong>批次 ID</strong>，供 <code>check --ack</code> 结算。回复串线程用 message id，消费确认用 delivery id。</p>
         <p>拉取侧是「取最老的未确认批次」——按消费代数排序，一次取一批：</p>
         <div class="dark-box">
           <div class="dt">JS · check（截取）</div>
@@ -882,6 +885,7 @@
              → 不 ack 就每次都返回同一批（at-least-once）</div>
         </div>
         <div class="ins"><strong>未 ack 前同一批次反复返回 → 至少一次投递（at-least-once）</strong>；ack 后消息本身 <code>read</code> 置 1。代价是接收方必须容忍重复消息——这是 at-least-once 语义的标准交换。</div>
+        <p><strong>「能不能 check 到自己的消息」取决于 <code>--to</code> 地址，不取决于发送者身份</strong>：<code>send</code> 只负责写 <code>messages</code> 表并生成批次，不检查发信人。投到 <code>run:run_xxx</code>（共享信箱）的消息，协调者自己 <code>check</code> 也会拉到自己发的那条；投到 <code>dispatch:&lt;id&gt;</code> 或 <code>term_xxx</code>（定向信箱）则只有接收方拉得到。这也是为什么正常编排中协调者给 worker 的指令走定向地址，只有 worker 回的 <code>worker_done</code>/<code>reply</code> 才进 Run 信箱由协调者消费。</p>
 
         <details>
           <summary>配套实现：thread_id 线程、幂等账本与 priority</summary>
